@@ -1,0 +1,53 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               Int      @id @default(autoincrement())
+  firstName        String
+  lastName         String
+  email            String   @unique
+  phone            String?
+  password         String
+  
+  // --- ACCOUNT DETAILS ---
+  accountNumber    String   @unique
+  balance          Float    @default(0.00)
+  walletIndex      Int      @unique
+  
+  // --- WALLET ADDRESSES ---
+  ethAddress       String   // ERC-20 (ETH, BNB, Base, etc.)
+  btcAddress       String   // Bitcoin
+  solAddress       String   // Solana
+  trxAddress       String   // Tron
+  
+  // --- KYC FIELDS ---
+  kycStatus        String   @default("NOT_VERIFIED") // Options: NOT_VERIFIED, PENDING, VERIFIED, REJECTED
+  kycFront         String?  // Base64 Image
+  kycBack          String?  // Base64 Image
+  kycSelfie        String?  // Base64 Image
+  
+  // --- SECURITY FIELDS ---
+  verificationCode String?  // For Email OTP
+  isEmailVerified  Boolean  @default(false) // <--- NEW FIELD: Blocks login until true
+  
+  createdAt        DateTime @default(now())
+
+  transactions     Transaction[]
+}
+
+model Transaction {
+  id        Int      @id @default(autoincrement())
+  amount    Float
+  type      String   // DEPOSIT, WITHDRAWAL, TRANSFER
+  status    String   // PENDING, APPROVED, FAILED
+  method    String   // BTC, ETH, BANK_TRANSFER, etc.
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+}
