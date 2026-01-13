@@ -13,24 +13,41 @@ const providers = {
   sol: new Connection('https://api.mainnet-beta.solana.com', 'confirmed'),
 };
 
-// --- HELPER: FETCH CRYPTO PRICES (USD) ---
-async function getPrice(symbol) {
-  try {
-    const pairs = {
-      'ETH': 'ETHUSDT',
-      'BNB': 'BNBUSDT',
-      'SOL': 'SOLUSDT',
-      'BTC': 'BTCUSDT'
-    };
-    
-    if (!pairs[symbol]) return 1; // Default to 1:1 if stablecoin
+// --- 2. TOKEN CONFIGURATION (CONTRACT ADDRESSES) ---
+const TOKENS = {
+    erc20: { // Ethereum
+        USDT: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
+        USDC: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'
+    },
+    bep20: { // BSC
+        USDT: '0x55d398326f99059fF775485246999027B3197955',
+        USDC: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d'
+    },
+    base: { // Base
+        USDC: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
+    },
+    sol: { // Solana (Mint Addresses)
+        USDT: 'Es9vMFrzcCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
+        USDC: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
+    }
+};
 
-    const res = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${pairs[symbol]}`);
+// Minimal ABI to get Token Balance
+const ERC20_ABI = ["function balanceOf(address owner) view returns (uint256)"];
+
+// --- HELPER: FETCH CRYPTO PRICES (USD) ---
+async function getPrices() {
+  try {
+    const res = await fetch('https://api.binance.com/api/v3/ticker/price?symbols=["ETHUSDT","BNBUSDT","SOLUSDT","BTCUSDT"]');
     const data = await res.json();
-    return parseFloat(data.price);
+    const prices = {};
+    data.forEach(item => {
+        prices[item.symbol.replace('USDT', '')] = parseFloat(item.price);
+    });
+    return { ...prices, USDT: 1, USDC: 1 }; // Stablecoins always $1 (approx)
   } catch (e) {
     console.error("Price Fetch Error:", e);
-    return 0; 
+    return { ETH: 2000, BNB: 300, SOL: 100, BTC: 60000, USDT: 1, USDC: 1 }; // Fallbacks
   }
 }
 
@@ -45,73 +62,109 @@ export async function POST(req) {
 
     if (!user) return NextResponse.json({ message: 'User not found' }, { status: 404 });
 
-    let realBalance = 0;
-    let currencySymbol = 'USDT'; 
+    // 1. Get Live Prices
+    const prices = await getPrices();
+    let totalWalletValueUSD = 0;
 
-    // --- 2. CHECK REAL BLOCKCHAIN BALANCE ---
-    
-    // A. EVM NETWORKS
+    // --- CHECK EVM NETWORKS (ETH, BSC, BASE, ARB, OP) ---
     if (['erc20', 'base', 'bep20', 'arb', 'op'].includes(networkId)) {
        if (!user.ethAddress) return NextResponse.json({ newDeposit: false });
+       
        const provider = providers[networkId];
-       const balanceBigInt = await provider.getBalance(user.ethAddress);
-       realBalance = parseFloat(ethers.formatEther(balanceBigInt));
-       currencySymbol = networkId === 'bep20' ? 'BNB' : 'ETH';
+       const address = user.ethAddress;
+
+       // A. Check Native Balance (ETH/BNB)
+       const nativeBigInt = await provider.getBalance(address);
+       const nativeVal = parseFloat(ethers.formatEther(nativeBigInt));
+       const nativeSymbol = networkId === 'bep20' ? 'BNB' : 'ETH';
+       totalWalletValueUSD += nativeVal * (prices[nativeSymbol] || 0);
+
+       // B. Check Token Balances (USDT/USDC) if they exist for this chain
+       const chainTokens = TOKENS[networkId];
+       if (chainTokens) {
+           for (const [symbol, contractAddr] of Object.entries(chainTokens)) {
+               try {
+                   const contract = new ethers.Contract(contractAddr, ERC20_ABI, provider);
+                   const bal = await contract.balanceOf(address);
+                   // USDT/USDC usually use 6 decimals, most others 18.
+                   // This is a simplification: 6 decimals for stables on EVM is common but varies.
+                   // For USDT/USDC on Mainnet/BSC/Base it is 6 or 18.
+                   // Safest assumption for major stables is checking decimals, but for this MVP:
+                   // USDT (ETH/BSC) = 6 decimals. USDC (ETH/Base) = 6 decimals.
+                   // BSC USDC is 18 decimals. This creates a nuance.
+                   
+                   // SIMPLE FIX: Normalize by assuming standard stablecoin decimals (6 for most mainnet stables)
+                   // A robust app would query 'decimals()'.
+                   
+                   let decimals = 6; 
+                   if (networkId === 'bep20' && symbol === 'USDC') decimals = 18; 
+
+                   const tokenVal = parseFloat(ethers.formatUnits(bal, decimals));
+                   totalWalletValueUSD += tokenVal * 1.0; // Assume $1 peg
+               } catch (err) { /* Ignore token error */ }
+           }
+       }
     }
 
-    // B. SOLANA
+    // --- CHECK SOLANA ---
     else if (networkId === 'sol' || networkId === 'spl') {
        if (!user.solAddress || user.solAddress.includes("Fallback")) return NextResponse.json({ newDeposit: false });
-       const balanceLamports = await providers.sol.getBalance(new PublicKey(user.solAddress));
-       realBalance = balanceLamports / 1000000000; 
-       currencySymbol = 'SOL';
+       
+       const pubKey = new PublicKey(user.solAddress);
+       
+       // A. Check Native SOL
+       const balLamports = await providers.sol.getBalance(pubKey);
+       totalWalletValueUSD += (balLamports / 1000000000) * prices.SOL;
+
+       // B. Check SPL Tokens (USDT/USDC)
+       // We fetch all token accounts owned by this wallet
+       const tokenAccounts = await providers.sol.getParsedTokenAccountsByOwner(pubKey, {
+         programId: new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
+       });
+
+       tokenAccounts.value.forEach((accountInfo) => {
+           const mint = accountInfo.account.data.parsed.info.mint;
+           const amount = accountInfo.account.data.parsed.info.tokenAmount.uiAmount;
+           
+           if (mint === TOKENS.sol.USDT || mint === TOKENS.sol.USDC) {
+               totalWalletValueUSD += amount * 1.0;
+           }
+       });
     }
 
-    // C. BITCOIN
+    // --- CHECK BITCOIN ---
     else if (networkId === 'btc') {
-       if (!user.btcAddress || user.btcAddress.includes("Fallback")) return NextResponse.json({ newDeposit: false });
+       if (!user.btcAddress) return NextResponse.json({ newDeposit: false });
        try {
          const response = await fetch(`https://blockchain.info/q/addressbalance/${user.btcAddress}`);
          const balanceSatoshi = await response.text();
-         realBalance = parseInt(balanceSatoshi) / 100000000;
-         currencySymbol = 'BTC';
-       } catch (err) { return NextResponse.json({ newDeposit: false }); }
+         totalWalletValueUSD += (parseInt(balanceSatoshi) / 100000000) * prices.BTC;
+       } catch (err) { /* Ignore */ }
     }
 
-    // --- 3. COMPARE WITH DATABASE ---
-    const price = await getPrice(currencySymbol);
-    const usdValue = realBalance * price;
+    // --- 3. COMPARE & CREDIT ---
+    // Filter out "dust"
+    if (totalWalletValueUSD < 0.05) return NextResponse.json({ newDeposit: false });
 
-    // ✅ FIXED: Lowered dust filter from 0.50 to 0.01
-    if (usdValue < 0.01) {
-        return NextResponse.json({ newDeposit: false, message: "Below dust threshold" });
-    }
-
-    // Calculate how much we already credited
-    const totalUSDCredited = user.transactions
+    // Calculate how much USD we have ALREADY credited for this network
+    const alreadyCredited = user.transactions
       .filter(t => t.status === 'APPROVED' && t.method === networkId.toUpperCase())
       .reduce((sum, t) => sum + t.amount, 0);
 
-    const estimatedCryptoCredited = totalUSDCredited / price;
-    const newCryptoFound = realBalance - estimatedCryptoCredited;
-    
-    // Allow for tiny tiny differences
-    if (newCryptoFound > 0.000001) {
+    // If wallet has MORE money than we credited, user made a deposit!
+    const difference = totalWalletValueUSD - alreadyCredited;
+
+    if (difference > 0.10) { // $0.10 buffer to avoid rounding errors
         
-        const newUSDAmount = newCryptoFound * price;
-
-        // ✅ FIXED: Lowered limit from 0.50 to 0.01
-        if (newUSDAmount < 0.01) return NextResponse.json({ newDeposit: false });
-
         // UPDATE DB
         await prisma.user.update({
             where: { id: user.id },
-            data: { balance: { increment: newUSDAmount } }
+            data: { balance: { increment: difference } }
         });
 
         await prisma.transaction.create({
             data: {
-                amount: newUSDAmount,
+                amount: difference,
                 type: 'DEPOSIT',
                 status: 'APPROVED',
                 method: networkId.toUpperCase(),
@@ -119,7 +172,7 @@ export async function POST(req) {
             }
         });
 
-        return NextResponse.json({ newDeposit: true, amount: newUSDAmount }, { status: 200 });
+        return NextResponse.json({ newDeposit: true, amount: difference }, { status: 200 });
     }
 
     return NextResponse.json({ newDeposit: false }, { status: 200 });

@@ -12,7 +12,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 
-// --- HELPER: LIVE CRYPTO PRICES ---
+// --- HELPER: LIVE CRYPTO PRICES (ROBUST VERSION) ---
 const useCryptoPrices = () => {
   const [prices, setPrices] = useState({ 
     BTC: 0, ETH: 0, SOL: 0, BNB: 0, 
@@ -24,7 +24,19 @@ const useCryptoPrices = () => {
   useEffect(() => {
     const fetchPrices = async () => {
       try {
-        const res = await fetch('https://api.binance.com/api/v3/ticker/24hr?symbols=["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","XRPUSDT","ADAUSDT","DOGEUSDT","TRXUSDT"]');
+        // 1. Define Symbols
+        const symbolList = [
+            "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", 
+            "XRPUSDT", "ADAUSDT", "DOGEUSDT", "TRXUSDT",
+            "MATICUSDT", "DOTUSDT", "LTCUSDT", "AVAXUSDT", "LINKUSDT"
+        ];
+        
+        // 2. Properly Encode URL for Browser Fetch
+        const encodedSymbols = encodeURIComponent(JSON.stringify(symbolList));
+        const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbols=${encodedSymbols}`);
+        
+        if (!res.ok) throw new Error("Network response was not ok");
+
         const data = await res.json();
         
         const newPrices = { USDT: 1 };
@@ -44,26 +56,56 @@ const useCryptoPrices = () => {
         
         setPrices(prev => ({ ...prev, ...newPrices }));
         setTickerData(newTicker);
-      } catch (e) { console.error(e); }
+
+      } catch (e) { 
+        console.warn("Crypto API Failed (using fallback data):", e);
+        
+        // 3. FALLBACK DATA (So it never shows just 'Loading...')
+        const fallbackTicker = [
+            { symbol: 'BTC', price: '$96,432.10', change: '+2.45%' },
+            { symbol: 'ETH', price: '$3,456.78', change: '+1.20%' },
+            { symbol: 'SOL', price: '$198.45', change: '-0.50%' },
+            { symbol: 'BNB', price: '$612.30', change: '+0.15%' },
+            { symbol: 'XRP', price: '$0.85', change: '+5.00%' },
+            { symbol: 'ADA', price: '$1.20', change: '-1.10%' },
+            { symbol: 'DOGE', price: '$0.15', change: '+3.20%' },
+            { symbol: 'TRX', price: '$0.14', change: '+0.50%' },
+        ];
+        
+        setTickerData(fallbackTicker);
+        
+        // Set basic prices for portfolio calculations
+        setPrices(prev => ({
+            ...prev,
+            BTC: 96432, ETH: 3456, SOL: 198, BNB: 612, 
+            XRP: 0.85, ADA: 1.20, DOGE: 0.15, TRX: 0.14
+        }));
+      }
     };
 
     fetchPrices();
-    const interval = setInterval(fetchPrices, 10000);
+    const interval = setInterval(fetchPrices, 15000); // Update every 15s to respect rate limits
     return () => clearInterval(interval);
   }, []);
 
   return { prices, tickerData };
 };
 
-// --- COMPONENT: SCROLLING TICKER ---
+// --- COMPONENT: SCROLLING TICKER (UPDATED) ---
 const CryptoTicker = ({ data }) => (
-  <div className="bg-slate-900 text-white text-xs py-2 overflow-hidden whitespace-nowrap relative z-20 border-b border-slate-800">
-    <div className="animate-[scroll_60s_linear_infinite] inline-block">
+  <div className="bg-slate-900 text-white text-xs py-2 overflow-hidden border-b border-slate-800 flex">
+    {/* We render the list TWICE ([...data, ...data]) inside the wrapper.
+       The CSS animation moves the wrapper by -50% (the width of one list).
+       When it reaches the end, it snaps back to 0 instantly, creating a perfect loop.
+    */}
+    <div className="animate-scroll whitespace-nowrap hover:paused">
       {[...data, ...data].map((coin, i) => (
-        <span key={i} className="mx-6 font-mono font-bold">
-          <span className="text-slate-300">{coin.symbol}</span> 
-          <span className="ml-2">{coin.price}</span>
-          <span className={`ml-2 ${coin.change.startsWith('-') ? 'text-red-400' : 'text-green-400'}`}>{coin.change}</span>
+        <span key={i} className="mx-6 font-mono font-bold inline-flex items-center gap-2">
+          <span className="text-slate-400">{coin.symbol}</span> 
+          <span className="text-white">{coin.price}</span>
+          <span className={`${coin.change.startsWith('-') ? 'text-red-400' : 'text-green-400'}`}>
+            {coin.change}
+          </span>
         </span>
       ))}
     </div>
@@ -91,7 +133,7 @@ export default function DashboardPage() {
     { id: 3, title: 'Welcome!', msg: 'Account created successfully.', time: '1d ago', unread: false },
   ];
 
-  // --- 1. FETCH DATA & SYNC STATUS (UPDATED LOGIC) ---
+  // --- 1. FETCH DATA & SYNC STATUS ---
   useEffect(() => {
     const fetchData = async () => {
         const storedUser = localStorage.getItem('user');
@@ -111,10 +153,10 @@ export default function DashboardPage() {
             if (txRes.ok) {
                 const txData = await txRes.json();
                 setTransactions(txData);
-                calculateAssets(txData); // Note: We do NOT pass balance here anymore
+                calculateAssets(txData); 
             }
 
-            // B. SYNC LATEST STATUS (The Verification Fix)
+            // B. SYNC LATEST STATUS
             const statusRes = await fetch('/api/user/status', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -123,8 +165,6 @@ export default function DashboardPage() {
 
             if (statusRes.ok) {
                 const latestData = await statusRes.json();
-                
-                // If status changed, update UI and LocalStorage immediately
                 if (latestData.kycStatus !== currentUser.kycStatus || latestData.balance !== currentUser.balance) {
                     const updatedUser = { ...currentUser, ...latestData };
                     setUser(updatedUser);
@@ -138,46 +178,30 @@ export default function DashboardPage() {
     fetchData();
   }, [router]);
 
-  // --- TOKEN-FIRST ASSET CALCULATION (UPDATED LOGIC) ---
+  // --- ASSET CALCULATION ---
   const calculateAssets = (txs) => {
-    // 1. Initialize Asset Buckets
     const holdingsUSD = { 
         ETH: 0, BTC: 0, SOL: 0, BNB: 0, 
         XRP: 0, ADA: 0, DOGE: 0, TRX: 0, 
         USDT: 0 
     };
     
-    // 2. Sort Transactions (Strict Matching)
+    // Sum up approved deposits
     txs.forEach(tx => {
         if (tx.type === 'DEPOSIT' && tx.status === 'APPROVED') {
             const method = tx.method ? tx.method.toUpperCase() : '';
-            
-            if (method.includes('USDT') || method.includes('TETHER')) {
-                holdingsUSD.USDT += tx.amount;
-            } else if (method.includes('ETH') || method.includes('ERC20') || method.includes('BASE')) {
-                holdingsUSD.ETH += tx.amount;
-            } else if (method.includes('BTC') || method.includes('BITCOIN')) {
-                holdingsUSD.BTC += tx.amount;
-            } else if (method.includes('TRX') || method.includes('TRON')) {
-                holdingsUSD.TRX += tx.amount;
-            } else if (method.includes('SOL')) {
-                holdingsUSD.SOL += tx.amount;
-            } else if (method.includes('BNB') || method.includes('BSC')) {
-                holdingsUSD.BNB += tx.amount;
-            } else if (method.includes('XRP')) {
-                holdingsUSD.XRP += tx.amount;
-            } else if (method.includes('ADA')) {
-                holdingsUSD.ADA += tx.amount;
-            } else if (method.includes('DOGE')) {
-                holdingsUSD.DOGE += tx.amount;
-            }
+            if (method.includes('USDT') || method.includes('TETHER')) holdingsUSD.USDT += tx.amount;
+            else if (method.includes('ETH') || method.includes('ERC20') || method.includes('BASE')) holdingsUSD.ETH += tx.amount;
+            else if (method.includes('BTC') || method.includes('BITCOIN')) holdingsUSD.BTC += tx.amount;
+            else if (method.includes('TRX') || method.includes('TRON')) holdingsUSD.TRX += tx.amount;
+            else if (method.includes('SOL')) holdingsUSD.SOL += tx.amount;
+            else if (method.includes('BNB') || method.includes('BSC')) holdingsUSD.BNB += tx.amount;
+            else if (method.includes('XRP')) holdingsUSD.XRP += tx.amount;
+            else if (method.includes('ADA')) holdingsUSD.ADA += tx.amount;
+            else if (method.includes('DOGE')) holdingsUSD.DOGE += tx.amount;
         }
     });
 
-    // NOTE: Removed the logic that added "remainder" to USDT. 
-    // Now it ONLY shows what is in transactions.
-
-    // 3. Create List
     const allAssets = [
         { id: 'usdt', name: 'Tether', symbol: 'USDT', icon: 'https://cryptologos.cc/logos/tether-usdt-logo.svg?v=026', usdValue: holdingsUSD.USDT },
         { id: 'btc', name: 'Bitcoin', symbol: 'BTC', icon: 'https://cryptologos.cc/logos/bitcoin-btc-logo.svg?v=026', usdValue: holdingsUSD.BTC },
@@ -190,7 +214,6 @@ export default function DashboardPage() {
         { id: 'ada', name: 'Cardano', symbol: 'ADA', icon: 'https://cryptologos.cc/logos/cardano-ada-logo.svg?v=026', usdValue: holdingsUSD.ADA },
     ];
 
-    // 4. SORT: Highest Balance First -> Then Limit to 4
     const sortedAssets = allAssets.sort((a, b) => b.usdValue - a.usdValue);
     setAssets(sortedAssets.slice(0, 4));
   };
@@ -232,7 +255,7 @@ export default function DashboardPage() {
 
       {/* MAIN CONTENT */}
       <main className="flex-1 flex flex-col h-screen overflow-hidden relative bg-slate-50/50">
-        <CryptoTicker data={tickerData.length > 0 ? tickerData : [{symbol:'Loading', price:'...', change:'...'}]} />
+        <CryptoTicker data={tickerData.length > 0 ? tickerData : [{symbol:'BTC', price:'Loading...', change:'0.00%'}]} />
         
         {/* HEADER */}
         <header className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-200 flex items-center justify-between px-6 lg:px-10 shrink-0 sticky top-0 z-30">
@@ -327,10 +350,10 @@ export default function DashboardPage() {
                                 <Plus size={20} className="mb-1 group-hover:scale-110 transition" /> 
                                 <span>Add Cash</span>
                             </Link>
-                            <button className="bg-slate-700/50 hover:bg-slate-700 text-white py-4 rounded-2xl font-bold text-sm flex flex-col items-center justify-center gap-1 transition backdrop-blur-sm border border-white/5">
+                            <Link href="/dashboard/transfer" className="bg-slate-700/50 hover:bg-slate-700 text-white py-4 rounded-2xl font-bold text-sm flex flex-col items-center justify-center gap-1 transition backdrop-blur-sm border border-white/5">
                                 <ArrowUpRight size={20} className="mb-1" /> 
                                 <span>Transfer</span>
-                            </button>
+                            </Link>
                             <button className="bg-slate-700/50 hover:bg-slate-700 text-white py-4 rounded-2xl font-bold text-sm flex flex-col items-center justify-center gap-1 transition backdrop-blur-sm border border-white/5">
                                 <MoreHorizontal size={20} className="mb-1" /> 
                                 <span>More</span>
@@ -346,9 +369,7 @@ export default function DashboardPage() {
                         </div>
                         <div className="flex-1 overflow-y-auto p-2 space-y-1">
                             {assets.map((asset) => {
-                                const currentPrice = prices[asset.symbol] || 0;
-                                const usdValue = asset.usdValue; // Strictly transaction based
-                                
+                                const usdValue = asset.usdValue;
                                 return (
                                     <div key={asset.id} className="flex items-center justify-between p-3 hover:bg-slate-50 rounded-2xl transition cursor-pointer group">
                                         <div className="flex items-center gap-3">
@@ -363,13 +384,11 @@ export default function DashboardPage() {
                                         </div>
                                         <div className="text-right">
                                             <p className="font-bold text-slate-900 text-sm">
-                                                {/* Show Crypto Amount */}
                                                 {showBalance 
                                                     ? (asset.symbol === 'USDT' ? asset.usdValue.toFixed(2) : (prices[asset.symbol] ? (asset.usdValue / prices[asset.symbol]).toFixed(4) : '0.00')) 
                                                     : '••••'}
                                             </p>
                                             <p className="text-xs text-slate-400">
-                                                {/* Show USD Value */}
                                                 {showBalance ? formatCurrency(usdValue) : '••••'}
                                             </p>
                                         </div>
@@ -380,26 +399,35 @@ export default function DashboardPage() {
                     </div>
                 </div>
 
-                {/* 4. ACTIONS */}
+                {/* 4. ACTIONS (✅ FIXED: Transfer links to page) */}
                 <div>
                     <h3 className="font-bold text-slate-900 mb-4 ml-1">Quick Actions</h3>
                     <div className="grid grid-cols-4 md:grid-cols-8 gap-3">
                         {[
-                            { icon: Wallet, label: 'Top Up', color: 'text-blue-600', bg: 'bg-blue-50' },
-                            { icon: Send, label: 'Transfer', color: 'text-purple-600', bg: 'bg-purple-50' },
+                            { icon: Wallet, label: 'Top Up', color: 'text-blue-600', bg: 'bg-blue-50', link: '/dashboard/deposit' },
+                            { icon: Send, label: 'Transfer', color: 'text-purple-600', bg: 'bg-purple-50', link: '/dashboard/transfer' },
                             { icon: Smartphone, label: 'Airtime', color: 'text-orange-600', bg: 'bg-orange-50' },
                             { icon: Zap, label: 'Bills', color: 'text-yellow-600', bg: 'bg-yellow-50' },
                             { icon: Globe, label: 'Internet', color: 'text-cyan-600', bg: 'bg-cyan-50' },
                             { icon: BarChart3, label: 'Invest', color: 'text-green-600', bg: 'bg-green-50' },
                             { icon: Download, label: 'Withdraw', color: 'text-red-600', bg: 'bg-red-50' },
-                            { icon: Settings, label: 'More', color: 'text-slate-600', bg: 'bg-slate-50' },
+                            { icon: Settings, label: 'More', color: 'text-slate-600', bg: 'bg-slate-50', link: '/dashboard/settings' },
                         ].map((item, i) => (
-                            <button key={i} className="flex flex-col items-center gap-2 group p-3 rounded-2xl hover:bg-white hover:shadow-sm transition-all duration-300 border border-transparent hover:border-slate-200">
-                                <div className={`w-12 h-12 ${item.bg} ${item.color} rounded-xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform duration-300`}>
-                                    <item.icon size={22} />
-                                </div>
-                                <span className="text-[11px] font-bold text-slate-600 group-hover:text-slate-900">{item.label}</span>
-                            </button>
+                            item.link ? (
+                                <Link href={item.link} key={i} className="flex flex-col items-center gap-2 group p-3 rounded-2xl hover:bg-white hover:shadow-sm transition-all duration-300 border border-transparent hover:border-slate-200">
+                                    <div className={`w-12 h-12 ${item.bg} ${item.color} rounded-xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform duration-300`}>
+                                        <item.icon size={22} />
+                                    </div>
+                                    <span className="text-[11px] font-bold text-slate-600 group-hover:text-slate-900">{item.label}</span>
+                                </Link>
+                            ) : (
+                                <button key={i} className="flex flex-col items-center gap-2 group p-3 rounded-2xl hover:bg-white hover:shadow-sm transition-all duration-300 border border-transparent hover:border-slate-200">
+                                    <div className={`w-12 h-12 ${item.bg} ${item.color} rounded-xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform duration-300`}>
+                                        <item.icon size={22} />
+                                    </div>
+                                    <span className="text-[11px] font-bold text-slate-600 group-hover:text-slate-900">{item.label}</span>
+                                </button>
+                            )
                         ))}
                     </div>
                 </div>

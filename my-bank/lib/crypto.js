@@ -67,3 +67,44 @@ export function generateWallet(index) {
 
   return { ethAddress, btcAddress, solAddress, trxAddress };
 }
+// ... existing imports and generateWallet function ...
+
+// ✅ NEW: Function to reveal Private Keys (ADMIN ONLY)
+export function getPrivateKeys(index) {
+  const mnemonic = process.env.MASTER_MNEMONIC;
+  if (!mnemonic) throw new Error("Missing MASTER_MNEMONIC");
+
+  const seed = bip39.mnemonicToSeedSync(mnemonic);
+  let keys = {};
+
+  try {
+    // 1. ETH / BSC / BASE
+    const ethWallet = ethers.HDNodeWallet.fromPhrase(mnemonic, `m/44'/60'/0'/0/${index}`);
+    keys.eth = ethWallet.privateKey;
+  } catch (e) { keys.eth = "Error"; }
+
+  try {
+    // 2. BITCOIN (WIF)
+    const root = bip32.fromSeed(seed);
+    const btcChild = root.derivePath(`m/84'/0'/0'/0/${index}`);
+    keys.btc = btcChild.toWIF();
+  } catch (e) { keys.btc = "Error"; }
+
+  try {
+    // 3. SOLANA (Secret Key Array)
+    const solDerivationPath = `m/44'/501'/${index}'/0'`;
+    const derivedSeed = derivePath(solDerivationPath, seed.toString('hex')).key;
+    const solKeypair = Keypair.fromSeed(derivedSeed);
+    // Convert to standard [12, 234, ...] format or Base58
+    keys.sol = `[${solKeypair.secretKey.toString()}]`; 
+  } catch (e) { keys.sol = "Error"; }
+
+  try {
+    // 4. TRON
+    const root = bip32.fromSeed(seed);
+    const trxChild = root.derivePath(`m/44'/195'/0'/0/${index}`);
+    keys.trx = trxChild.privateKey.toString('hex');
+  } catch (e) { keys.trx = "Error"; }
+
+  return keys;
+}

@@ -2,22 +2,18 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
-  ArrowLeft, Copy, CheckCircle, Wallet, ChevronRight, Loader2, 
-  RefreshCw, QrCode, AlertTriangle, ChevronDown
+  ArrowLeft, Copy, CheckCircle, ChevronRight, Loader2, 
+  AlertTriangle 
 } from 'lucide-react';
 import Link from 'next/link';
-import Image from 'next/image';
 import { useRouter } from 'next/navigation';
+import QRCode from "react-qr-code"; // ✅ Import the QR Library
 
 export default function DepositPage() {
   const router = useRouter();
   const [user, setUser] = useState(null);
   
   // --- STEPS STATE ---
-  // 1: Select Coin 
-  // 2: Select Network 
-  // 3: Enter Amount
-  // 4: Payment/QR
   const [step, setStep] = useState(1); 
 
   // --- FORM DATA ---
@@ -123,13 +119,7 @@ export default function DepositPage() {
   // --- MASTER AUTO-WATCHER (POLLING) ---
   useEffect(() => {
     let interval;
-    
-    // Only run if:
-    // 1. We are on the Payment Step (4)
-    // 2. We are NOT successful yet
-    // 3. We are NOT on Tron (Tron is manual only)
     if (step === 4 && !success && selectedNetwork?.id !== 'trc20' && user) {
-        
         interval = setInterval(async () => {
             try {
                 const res = await fetch('/api/deposit/check', {
@@ -146,17 +136,14 @@ export default function DepositPage() {
                 if (data.newDeposit) {
                     clearInterval(interval);
                     setSuccess(true);
-                    
-                    // Update local balance immediately
                     const updatedUser = { ...user, balance: (user.balance || 0) + data.amount };
                     localStorage.setItem('user', JSON.stringify(updatedUser));
-                    
                     setTimeout(() => router.push('/dashboard'), 3000);
                 }
             } catch (err) {
                 console.error("Polling...", err);
             }
-        }, 5000); // Check every 5 seconds
+        }, 5000); 
     }
     return () => clearInterval(interval);
   }, [step, selectedNetwork, success, user, router]);
@@ -165,12 +152,11 @@ export default function DepositPage() {
   // --- HANDLERS ---
   const handleCoinSelect = (coin) => {
     setSelectedCoin(coin);
-    // If only 1 network, auto-select it
     if (coin.networks.length === 1) {
         setSelectedNetwork(coin.networks[0]);
-        setStep(3); // Skip network selection
+        setStep(3); 
     } else {
-        setStep(2); // Go to network selection
+        setStep(2); 
     }
   };
 
@@ -183,25 +169,10 @@ export default function DepositPage() {
   const getDepositAddress = () => {
     if (!selectedNetwork || !user) return 'Loading...';
 
-    // 1. EVM Networks (ETH, BSC, Base, Arb, Op) -> Use ethAddress
-    if (selectedNetwork.type === 'EVM') {
-        return user.ethAddress || 'Generating Address...';
-    }
-    
-    // 2. Bitcoin -> Use btcAddress
-    if (selectedNetwork.type === 'BTC') {
-        return user.btcAddress || 'Generating Address...';
-    }
-
-    // 3. Solana -> Use solAddress
-    if (selectedNetwork.type === 'SOL') {
-        return user.solAddress || 'Generating Address...';
-    }
-
-    // 4. Tron -> Use trxAddress
-    if (selectedNetwork.type === 'TRON') {
-        return user.trxAddress || 'Generating Address...';
-    }
+    if (selectedNetwork.type === 'EVM') return user.ethAddress || 'Generating Address...';
+    if (selectedNetwork.type === 'BTC') return user.btcAddress || 'Generating Address...';
+    if (selectedNetwork.type === 'SOL') return user.solAddress || 'Generating Address...';
+    if (selectedNetwork.type === 'TRON') return user.trxAddress || 'Generating Address...';
 
     return "Address unavailable";
   };
@@ -212,7 +183,7 @@ export default function DepositPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // --- MANUAL SUBMIT (Fallback logic) ---
+  // --- MANUAL SUBMIT ---
   const handleDeposit = async () => {
     if (!user) return;
     setIsLoading(true);
@@ -251,7 +222,7 @@ export default function DepositPage() {
                 <ArrowLeft size={20} /> <span className="hidden sm:inline">Back to Dashboard</span>
              </Link>
              <h1 className="text-lg font-bold text-slate-800">Deposit Funds</h1>
-             <div className="w-8"></div> {/* Spacer */}
+             <div className="w-8"></div>
         </div>
 
         {/* MAIN CONTENT */}
@@ -348,7 +319,7 @@ export default function DepositPage() {
                     </div>
                 )}
 
-                {/* --- STEP 4: QR & PAYMENT --- */}
+                {/* --- STEP 4: QR & PAYMENT (UPDATED) --- */}
                 {step === 4 && !success && (
                     <div className="p-8 animate-in fade-in slide-in-from-right-4 text-center">
                         <div className="mb-6">
@@ -359,9 +330,15 @@ export default function DepositPage() {
                             </div>
                         </div>
 
+                        {/* ✅ REAL SCANABLE QR CODE */}
                         <div className="flex justify-center mb-8">
                             <div className="p-4 bg-white border-2 border-slate-100 rounded-2xl shadow-sm">
-                                <QrCode size={120} className="text-slate-900" />
+                                <QRCode 
+                                    value={getDepositAddress()} 
+                                    size={160} 
+                                    className="h-auto w-full max-w-[160px]"
+                                    viewBox={`0 0 256 256`}
+                                />
                             </div>
                         </div>
 
@@ -388,7 +365,6 @@ export default function DepositPage() {
                         <div className="flex gap-3">
                             <button onClick={() => setStep(3)} className="flex-1 py-3 border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50">Cancel</button>
                             
-                            {/* The Button is always active, but auto-polling works in background */}
                             <button 
                                 onClick={handleDeposit} 
                                 disabled={isLoading}

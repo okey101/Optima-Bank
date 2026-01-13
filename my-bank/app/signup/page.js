@@ -25,7 +25,7 @@ export default function SignupPage() {
     country: 'United States',
     currency: 'USD - US Dollar',
     accountType: 'Savings Account',
-    pin: '',
+    pin: '', // This stores the 4-digit PIN
     password: '',
     confirmPassword: ''
   });
@@ -34,7 +34,7 @@ export default function SignupPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // --- 1. SIMULATION LOGIC (Preserved) ---
+  // --- 1. SIMULATION LOGIC ---
   useEffect(() => {
     const timer1 = setTimeout(() => setLoadingText("Verifying Browser Integrity..."), 1000);
     const timer2 = setTimeout(() => setLoadingText("Encrypting Session (256-bit SSL)..."), 2000);
@@ -56,11 +56,11 @@ export default function SignupPage() {
   const handleNext = () => setStep(step + 1);
   const handleBack = () => setStep(step - 1);
   
-  // --- 4. REGISTRATION LOGIC (Updated for Verification) ---
+  // --- 4. REGISTRATION LOGIC (FIXED) ---
   const handleRegister = async () => {
     setError('');
     
-    // Basic Validation
+    // --- VALIDATION START ---
     if (!agreed) {
         setError("You must agree to the terms.");
         return;
@@ -73,6 +73,12 @@ export default function SignupPage() {
         setError("Password must be at least 6 characters.");
         return;
     }
+    // ✅ NEW: Validate PIN Length
+    if (formData.pin.length !== 4) {
+        setError("Transaction PIN must be exactly 4 digits.");
+        return;
+    }
+    // --- VALIDATION END ---
 
     setIsLoading(true);
 
@@ -85,14 +91,15 @@ export default function SignupPage() {
                 lastName: formData.lastName,
                 email: formData.email,
                 phone: formData.phone,
-                password: formData.password
+                password: formData.password,
+                pin: formData.pin // ✅ CRITICAL FIX: Send PIN to server
             })
         });
 
         const data = await res.json();
 
         if (res.ok) {
-            // UPDATED: Redirect to Verify Page instead of Dashboard
+            // Redirect to Verify Page
             router.push(`/verify?email=${formData.email}`);
         } else {
             setError(data.message || "Registration failed. Please try again.");

@@ -15,10 +15,13 @@ export async function POST(req) {
         return NextResponse.json({ message: 'Invalid code' }, { status: 400 });
     }
 
-    // Code is correct! Clear it to verify the user.
+    // Code is correct! Clear it AND mark user as verified.
     const updatedUser = await prisma.user.update({
         where: { email },
-        data: { verificationCode: null } 
+        data: { 
+            verificationCode: null,
+            isEmailVerified: true // ✅ FIX: This allows the user to log in
+        } 
     });
 
     const { password: _, ...userWithoutPassword } = updatedUser;

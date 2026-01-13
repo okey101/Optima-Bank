@@ -1,53 +1,69 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "sqlite" // Or "postgresql" if you are using Vercel/Neon
   url      = env("DATABASE_URL")
 }
 
 model User {
-  id               Int      @id @default(autoincrement())
-  firstName        String
-  lastName         String
-  email            String   @unique
-  phone            String?
-  password         String
-  
-  // --- ACCOUNT DETAILS ---
-  accountNumber    String   @unique
-  balance          Float    @default(0.00)
-  walletIndex      Int      @unique
-  
-  // --- WALLET ADDRESSES ---
-  ethAddress       String   // ERC-20 (ETH, BNB, Base, etc.)
-  btcAddress       String   // Bitcoin
-  solAddress       String   // Solana
-  trxAddress       String   // Tron
-  
-  // --- KYC FIELDS ---
-  kycStatus        String   @default("NOT_VERIFIED") // Options: NOT_VERIFIED, PENDING, VERIFIED, REJECTED
-  kycFront         String?  // Base64 Image
-  kycBack          String?  // Base64 Image
-  kycSelfie        String?  // Base64 Image
-  
-  // --- SECURITY FIELDS ---
-  verificationCode String?  // For Email OTP
-  isEmailVerified  Boolean  @default(false) // <--- NEW FIELD: Blocks login until true
-  
-  createdAt        DateTime @default(now())
+  id            String    @id @default(cuid())
+  email         String    @unique
+  firstName     String
+  lastName      String
+  password      String
+  pin           String
 
-  transactions     Transaction[]
+  // ✅ NEW: Unique 10-digit Account Number
+  // We use "PENDING" as a temporary default for old users until you update them
+  accountNumber String    @unique @default("PENDING")
+
+  balance       Float     @default(0.0)
+  
+  // --- WALLET KEYS (For Crypto Features) ---
+  walletIndex   Int       @default(0) // Used to derive keys
+  ethAddress    String?   // Ethereum / BNB / Base / Polygon
+  btcAddress    String?   // Bitcoin
+  solAddress    String?   // Solana
+  trxAddress    String?   // Tron
+
+  // --- KYC / VERIFICATION ---
+  kycStatus     String    @default("UNVERIFIED") // UNVERIFIED, PENDING, VERIFIED, REJECTED
+  
+  // Personal Details
+  dateOfBirth   String?
+  streetAddress String?
+  city          String?
+  country       String?
+  
+  // ID Documents
+  idType        String?
+  idNumber      String?
+  
+  // Image Links (Uploaded URLs)
+  kycFront      String?
+  kycBack       String?
+  kycSelfie     String?
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  transactions  Transaction[]
 }
 
 model Transaction {
-  id        Int      @id @default(autoincrement())
+  id        String   @id @default(cuid())
   amount    Float
-  type      String   // DEPOSIT, WITHDRAWAL, TRANSFER
-  status    String   // PENDING, APPROVED, FAILED
-  method    String   // BTC, ETH, BANK_TRANSFER, etc.
-  userId    Int
+  type      String   // DEPOSIT, WITHDRAW, TRANSFER
+  status    String   // PENDING, APPROVED, REJECTED, FAILED
+  method    String?  // e.g. "BITCOIN", "SENT TO JOHN", "BANK TRANSFER"
+  
+  userId    String
   user      User     @relation(fields: [userId], references: [id])
+
   createdAt DateTime @default(now())
 }
