@@ -1,29 +1,34 @@
 import { NextResponse } from 'next/server';
 import prisma from '../../../../lib/prisma';
 
-// 1. GET: Fetch all users with PENDING status (INCLUDING IMAGES)
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const pendingUsers = await prisma.user.findMany({
-      where: {
-        kycStatus: 'PENDING'
-      },
+      where: { kycStatus: 'PENDING' },
       select: {
         id: true,
         firstName: true,
         lastName: true,
         email: true,
         kycStatus: true,
-        kycFront: true,   // ✅ Fetch Front ID
-        kycBack: true,    // ✅ Fetch Back ID
-        kycSelfie: true   // ✅ Fetch Selfie
+        kycFront: true,
+        kycBack: true,
+        kycSelfie: true,
+        // ✅ FETCH NEW FIELDS
+        dateOfBirth: true,
+        streetAddress: true,
+        city: true,
+        country: true,
+        idType: true,
+        idNumber: true
       }
     });
 
     return NextResponse.json(pendingUsers, { status: 200 });
   } catch (error) {
-    console.error("Admin KYC Fetch Error:", error);
-    return NextResponse.json({ error: 'Failed to fetch requests' }, { status: 500 });
+    return NextResponse.json({ error: 'Fetch failed' }, { status: 500 });
   }
 }
 

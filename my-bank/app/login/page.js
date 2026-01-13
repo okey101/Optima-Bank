@@ -18,7 +18,7 @@ export default function LoginPage() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [error, setError] = useState("");
 
-  // --- 1. OPENING SIMULATION LOGIC (Preserved) ---
+  // --- 1. OPENING SIMULATION LOGIC ---
   useEffect(() => {
     const timer1 = setTimeout(() => setLoadingText("Verifying Encryption Keys..."), 800);
     const timer2 = setTimeout(() => setLoadingText("Establishing Secure Connection..."), 1800);
@@ -31,7 +31,7 @@ export default function LoginPage() {
     };
   }, []);
 
-  // --- 2. REAL LOGIN HANDLER (Updated) ---
+  // --- 2. REAL LOGIN HANDLER (Updated for PIN Flow) ---
   const handleLogin = async (e) => {
     e.preventDefault();
     setIsLoggingIn(true);
@@ -47,9 +47,9 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (res.ok) {
-        // Save user and redirect
-        localStorage.setItem('user', JSON.stringify(data.user));
-        router.push('/dashboard');
+        // ✅ UPDATE: Redirect to PIN page with query params
+        const query = `?email=${encodeURIComponent(data.email)}&newDevice=${data.isNewDevice}`;
+        router.push(`/login/pin${query}`);
       } else {
         setError(data.message || 'Invalid email or password');
       }
@@ -93,10 +93,10 @@ export default function LoginPage() {
          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-white opacity-5 rounded-full blur-3xl"></div>
          <div className="absolute bottom-0 right-0 w-80 h-80 bg-blue-400 opacity-10 rounded-full blur-3xl"></div>
 
-         {/* Logo */}
-         <div className="relative z-10 w-40 h-12">
+         {/* ✅ Logo with Link to Home */}
+         <Link href="/" className="relative z-10 w-40 h-12 block cursor-pointer hover:opacity-90 transition">
             <Image src="/logo.png" alt="Finora Logo" fill className="object-contain object-left invert brightness-0 grayscale opacity-100" />
-         </div>
+         </Link>
 
          {/* Center Content */}
          <div className="relative z-10 mt-8">
@@ -144,11 +144,11 @@ export default function LoginPage() {
       {/* --- RIGHT SIDE: LOGIN FORM --- */}
       <div className="md:w-7/12 w-full bg-slate-50 flex flex-col items-center justify-center py-12 px-6 md:px-20 overflow-y-auto">
         
-        {/* Mobile Logo (Visible on small screens) */}
+        {/* ✅ Mobile Logo with Link to Home */}
         <div className="md:hidden w-full flex justify-center mb-8">
-            <div className="relative w-40 h-10">
+            <Link href="/" className="relative w-40 h-10 block cursor-pointer hover:opacity-80 transition">
                 <Image src="/logo.png" alt="Finora Logo" fill className="object-contain" priority />
-            </div>
+            </Link>
         </div>
 
         <div className="max-w-md w-full bg-white p-10 rounded-3xl shadow-xl border border-slate-100">

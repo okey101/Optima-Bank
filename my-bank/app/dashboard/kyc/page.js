@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Menu, Home, ArrowRightLeft, CreditCard, Settings, LogOut, 
-  Wallet, ShieldCheck, FileText, UploadCloud, Camera, CheckCircle, 
-  ChevronRight, AlertTriangle, Loader2, User, X, RefreshCw
+  Menu, Home, Settings, LogOut, Wallet, ShieldCheck, FileText, 
+  UploadCloud, Camera, CheckCircle, ChevronRight, Loader2, User, 
+  X, AlertTriangle, MapPin, Calendar, CreditCard
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -18,6 +18,7 @@ const toBase64 = (file) => new Promise((resolve, reject) => {
     reader.onerror = error => reject(error);
 });
 
+// ✅ THIS EXPORT IS REQUIRED FOR THE PAGE TO WORK
 export default function KYCPage() {
   const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -26,30 +27,69 @@ export default function KYCPage() {
   // --- KYC STATE ---
   const [step, setStep] = useState(1);
   const [files, setFiles] = useState({ front: null, back: null, selfie: null });
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSubmitted, setIsSubmitted] = useState(false);
+  
+  // --- NEW FORM DATA ---
+  const [formData, setFormData] = useState({
+    dateOfBirth: '',
+    phone: '',
+    streetAddress: '',
+    city: '',
+    state: '',
+    zipCode: '',
+    country: '',
+    idType: 'National ID',
+    idNumber: ''
+  });
 
-  // --- CAMERA STATE (For Step 3) ---
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [status, setStatus] = useState('NOT_VERIFIED'); 
+
+  // --- CAMERA STATE ---
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [cameraStream, setCameraStream] = useState(null);
-  const [scanStatus, setScanStatus] = useState("idle"); // idle, scanning, captured
 
-  // --- FETCH USER ---
+  // --- FETCH USER & REFRESH STATUS ---
   useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    if (!storedUser) {
-      router.push('/login');
-    } else {
-      const parsedUser = JSON.parse(storedUser);
-      setUser(parsedUser);
-      if (parsedUser.kycStatus === 'PENDING' || parsedUser.kycStatus === 'VERIFIED') {
-        setIsSubmitted(true);
-      }
-    }
+    const initializeUser = async () => {
+        const storedUser = localStorage.getItem('user');
+        
+        if (!storedUser) {
+            router.push('/login');
+            return;
+        }
 
-    // Cleanup camera on unmount
+        const parsedLocalUser = JSON.parse(storedUser);
+        
+        // 1. Set initial state from local storage (fast load)
+        setUser(parsedLocalUser);
+        setStatus(parsedLocalUser.kycStatus || 'NOT_VERIFIED');
+        setFormData(prev => ({...prev, phone: parsedLocalUser.phone || ''}));
+
+        // 2. Silently fetch the LATEST data from server
+        try {
+            const res = await fetch('/api/user/refresh', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: parsedLocalUser.email })
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                
+                // 3. Update Local Storage & State with fresh DB data
+                localStorage.setItem('user', JSON.stringify(data.user));
+                setUser(data.user);
+                setStatus(data.user.kycStatus || 'NOT_VERIFIED');
+            }
+        } catch (error) {
+            console.error("Failed to refresh user data", error);
+        }
+    };
+
+    initializeUser();
+
     return () => stopCamera();
   }, [router]);
 
@@ -58,40 +98,32 @@ export default function KYCPage() {
     router.push('/login');
   };
 
-  // --- FILE HANDLING (Step 2) ---
+  const handleInputChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
   const handleFileChange = (type, e) => {
     const file = e.target.files[0];
     if (file) {
       if (file.size > 4 * 1024 * 1024) {
-        alert("File is too large! Please upload an image smaller than 4MB.");
+        alert("File too large (Max 4MB)");
         return;
       }
       setFiles(prev => ({ ...prev, [type]: file }));
     }
   };
 
-  const removeFile = (type) => {
-    setFiles(prev => ({ ...prev, [type]: null }));
-    if (type === 'selfie') {
-        setScanStatus("idle");
-    }
-  };
+  const removeFile = (type) => setFiles(prev => ({ ...prev, [type]: null }));
 
-  // --- CAMERA LOGIC (Step 3) ---
+  // --- CAMERA LOGIC ---
   const startCamera = async () => {
     setIsCameraActive(true);
-    setScanStatus("scanning");
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { facingMode: "user" } // Use front camera on mobile
-      });
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
       setCameraStream(stream);
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
+      if (videoRef.current) videoRef.current.srcObject = stream;
     } catch (err) {
-      console.error("Camera Error:", err);
-      alert("Could not access camera. Please allow camera permissions.");
+      alert("Camera access denied. Please allow camera permissions.");
       setIsCameraActive(false);
     }
   };
@@ -108,29 +140,21 @@ export default function KYCPage() {
     if (videoRef.current && canvasRef.current) {
       const video = videoRef.current;
       const canvas = canvasRef.current;
-      
-      // Match canvas size to video size
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
-      
-      // Draw video frame to canvas
       const ctx = canvas.getContext('2d');
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      
-      // Convert to blob/file
       canvas.toBlob((blob) => {
         const file = new File([blob], "selfie.jpg", { type: "image/jpeg" });
         setFiles(prev => ({ ...prev, selfie: file }));
-        setScanStatus("captured");
         stopCamera();
       }, 'image/jpeg', 0.8);
     }
   };
 
-  // --- SUBMIT LOGIC ---
+  // --- SUBMIT ---
   const handleSubmit = async () => {
     setIsSubmitting(true);
-    
     try {
         const frontBase64 = await toBase64(files.front);
         const backBase64 = await toBase64(files.back);
@@ -141,6 +165,7 @@ export default function KYCPage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 email: user.email,
+                ...formData, // Send all text fields
                 front: frontBase64,
                 back: backBase64,
                 selfie: selfieBase64
@@ -148,17 +173,15 @@ export default function KYCPage() {
         });
 
         if (res.ok) {
-            setIsSubmitted(true);
             const updatedUser = { ...user, kycStatus: 'PENDING' };
             localStorage.setItem('user', JSON.stringify(updatedUser));
+            setStatus('PENDING');
             setUser(updatedUser);
         } else {
             const data = await res.json();
             alert(data.message || "Upload failed. Please try again.");
         }
-
     } catch (error) {
-        console.error(error);
         alert("Connection error. Please try again.");
     } finally {
         setIsSubmitting(false);
@@ -225,228 +248,168 @@ export default function KYCPage() {
             </div>
         </header>
 
-        {/* KYC CONTENT */}
+        {/* KYC CONTENT SCROLLABLE AREA */}
         <div className="flex-1 overflow-y-auto p-6 lg:p-10 scroll-smooth">
             <div className="max-w-3xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
                 
-                {/* STATUS BANNER */}
-                {isSubmitted ? (
-                    <div className="bg-white rounded-3xl p-10 text-center shadow-xl border border-slate-100 animate-in zoom-in duration-500">
-                        <div className="w-24 h-24 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-sm">
-                            <CheckCircle size={48} />
-                        </div>
-                        <h2 className="text-3xl font-bold text-slate-900 mb-2">Verification Pending</h2>
-                        <p className="text-slate-500 max-w-md mx-auto mb-8">
-                            Your documents are being reviewed. This usually takes <strong>1-24 hours</strong>.
-                        </p>
-                        <Link href="/dashboard" className="inline-flex items-center justify-center px-8 py-3 font-bold text-white transition-all duration-200 bg-blue-600 rounded-xl hover:bg-blue-500 shadow-lg shadow-blue-500/30">
-                            Back to Dashboard
-                        </Link>
+                {/* --- STATE: PENDING --- */}
+                {status === 'PENDING' && (
+                    <div className="bg-white rounded-3xl p-10 text-center shadow-xl border border-slate-100">
+                        <div className="w-24 h-24 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-6"><CheckCircle size={48} /></div>
+                        <h2 className="text-3xl font-bold text-slate-900 mb-2">Under Review</h2>
+                        <p className="text-slate-500 mb-8">We are currently reviewing your documents.</p>
+                        <Link href="/dashboard" className="bg-slate-100 text-slate-600 px-8 py-3 rounded-xl font-bold">Back to Dashboard</Link>
                     </div>
-                ) : (
+                )}
+
+                {/* --- STATE: VERIFIED --- */}
+                {status === 'VERIFIED' && (
+                    <div className="bg-white rounded-3xl p-10 text-center shadow-xl border border-slate-100">
+                        <div className="w-24 h-24 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6"><ShieldCheck size={48} /></div>
+                        <h2 className="text-3xl font-bold text-slate-900 mb-2">Account Verified</h2>
+                        <p className="text-slate-500 mb-8">You have full access to all features.</p>
+                        <Link href="/dashboard" className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold">Go to Dashboard</Link>
+                    </div>
+                )}
+
+                {/* --- STATE: REJECTED (New) --- */}
+                {status === 'REJECTED' && (
+                    <div className="bg-white rounded-3xl p-10 text-center shadow-xl border border-red-100">
+                        <div className="w-24 h-24 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-6"><AlertTriangle size={48} /></div>
+                        <h2 className="text-3xl font-bold text-red-600 mb-2">Verification Failed</h2>
+                        <p className="text-slate-500 mb-8">Your previous application was rejected. Please ensure your photos are clear and details match your ID.</p>
+                        <button onClick={() => setStatus('NOT_VERIFIED')} className="bg-red-600 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-red-200">Try Again</button>
+                    </div>
+                )}
+
+                {/* --- STATE: FORM (NOT_VERIFIED) --- */}
+                {status === 'NOT_VERIFIED' && (
                     <>
-                        <div className="text-center mb-8">
-                            <h2 className="text-3xl font-extrabold text-slate-900">Verify Your Identity</h2>
-                            <p className="text-slate-500 mt-2">Complete the steps below to unlock full account features.</p>
+                        <div className="flex items-center justify-between mb-8 px-4">
+                            {[1, 2, 3, 4].map(i => (
+                                <div key={i} className={`w-8 h-8 rounded-full flex items-center justify-center font-bold border-2 ${step >= i ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-200 text-slate-300'}`}>{i}</div>
+                            ))}
                         </div>
 
-                        {/* STEPS INDICATOR */}
-                        <div className="flex items-center justify-between relative mb-12 px-4">
-                            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-slate-100 -z-10 rounded-full"></div>
-                            
-                            <div className={`flex flex-col items-center gap-2 ${step >= 1 ? 'text-blue-600' : 'text-slate-400'}`}>
-                                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold border-4 transition-colors ${step >= 1 ? 'bg-blue-600 border-white text-white shadow-lg shadow-blue-500/30' : 'bg-slate-100 border-white text-slate-400'}`}>1</div>
-                                <span className="text-xs font-bold uppercase tracking-wider bg-slate-50 px-2">Info</span>
-                            </div>
-                            <div className={`flex flex-col items-center gap-2 ${step >= 2 ? 'text-blue-600' : 'text-slate-400'}`}>
-                                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold border-4 transition-colors ${step >= 2 ? 'bg-blue-600 border-white text-white shadow-lg shadow-blue-500/30' : 'bg-slate-100 border-white text-slate-400'}`}>2</div>
-                                <span className="text-xs font-bold uppercase tracking-wider bg-slate-50 px-2">ID Card</span>
-                            </div>
-                            <div className={`flex flex-col items-center gap-2 ${step >= 3 ? 'text-blue-600' : 'text-slate-400'}`}>
-                                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold border-4 transition-colors ${step >= 3 ? 'bg-blue-600 border-white text-white shadow-lg shadow-blue-500/30' : 'bg-slate-100 border-white text-slate-400'}`}>3</div>
-                                <span className="text-xs font-bold uppercase tracking-wider bg-slate-50 px-2">Face</span>
-                            </div>
-                        </div>
-
-                        {/* --- STEP 1: CONFIRM INFO --- */}
+                        {/* STEP 1: Personal Info */}
                         {step === 1 && (
-                            <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100 animate-in fade-in slide-in-from-right-8">
-                                <h3 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
-                                    <User className="text-blue-600" /> Confirm Personal Details
-                                </h3>
-                                
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                                        <label className="text-xs font-bold text-slate-400 uppercase">First Name</label>
-                                        <p className="font-bold text-slate-900 text-lg">{user.firstName}</p>
+                            <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100">
+                                <h3 className="text-xl font-bold mb-6">Personal Details</h3>
+                                <div className="space-y-4">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div><label className="text-xs font-bold text-slate-500">First Name</label><input disabled value={user.firstName} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" /></div>
+                                        <div><label className="text-xs font-bold text-slate-500">Last Name</label><input disabled value={user.lastName} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" /></div>
                                     </div>
-                                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                                        <label className="text-xs font-bold text-slate-400 uppercase">Last Name</label>
-                                        <p className="font-bold text-slate-900 text-lg">{user.lastName}</p>
-                                    </div>
+                                    <div><label className="text-xs font-bold text-slate-500">Date of Birth</label><input type="date" name="dateOfBirth" value={formData.dateOfBirth} onChange={handleInputChange} className="w-full p-3 bg-white rounded-xl border border-slate-200" /></div>
+                                    <div><label className="text-xs font-bold text-slate-500">Phone Number</label><input type="tel" name="phone" value={formData.phone} onChange={handleInputChange} className="w-full p-3 bg-white rounded-xl border border-slate-200" /></div>
                                 </div>
-                                <button onClick={() => setStep(2)} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-500/20 transition flex items-center justify-center gap-2">
-                                    Details are Correct <ChevronRight size={18} />
-                                </button>
+                                <button onClick={() => setStep(2)} disabled={!formData.dateOfBirth} className="w-full mt-6 bg-blue-600 text-white py-3 rounded-xl font-bold disabled:opacity-50">Next Step</button>
                             </div>
                         )}
 
-                        {/* --- STEP 2: UPLOAD ID --- */}
+                        {/* STEP 2: Address */}
                         {step === 2 && (
-                            <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100 animate-in fade-in slide-in-from-right-8">
-                                <h3 className="text-xl font-bold text-slate-900 mb-2 flex items-center gap-2">
-                                    <FileText className="text-blue-600" /> Upload ID Document
-                                </h3>
-                                <p className="text-slate-500 text-sm mb-6">Upload a clear photo of your ID Front and Back.</p>
-                                
-                                {/* Front Upload */}
-                                <div className="mb-6">
-                                    <label className="text-sm font-bold text-slate-700 mb-2 block">Front Side</label>
-                                    {!files.front ? (
-                                        <label className="border-2 border-dashed border-slate-200 rounded-2xl h-32 flex flex-col items-center justify-center cursor-pointer hover:bg-slate-50 transition">
-                                            <UploadCloud className="text-blue-600 mb-2" size={24} />
-                                            <p className="text-sm font-bold text-slate-500">Click to upload Front</p>
-                                            <input type="file" className="hidden" onChange={(e) => handleFileChange('front', e)} accept="image/*,.pdf" />
-                                        </label>
-                                    ) : (
-                                        <div className="bg-green-50 border border-green-100 rounded-2xl p-4 flex items-center justify-between">
-                                            <span className="text-sm font-bold text-slate-900">{files.front.name}</span>
-                                            <button onClick={() => removeFile('front')} className="p-2 text-red-500"><X size={18} /></button>
-                                        </div>
-                                    )}
+                            <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100">
+                                <h3 className="text-xl font-bold mb-6">Residential Address</h3>
+                                <div className="space-y-4">
+                                    <div><label className="text-xs font-bold text-slate-500">Street Address</label><input name="streetAddress" value={formData.streetAddress} onChange={handleInputChange} className="w-full p-3 bg-white rounded-xl border border-slate-200" placeholder="123 Main St" /></div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div><label className="text-xs font-bold text-slate-500">City</label><input name="city" value={formData.city} onChange={handleInputChange} className="w-full p-3 bg-white rounded-xl border border-slate-200" /></div>
+                                        <div><label className="text-xs font-bold text-slate-500">State/Province</label><input name="state" value={formData.state} onChange={handleInputChange} className="w-full p-3 bg-white rounded-xl border border-slate-200" /></div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div><label className="text-xs font-bold text-slate-500">Zip Code</label><input name="zipCode" value={formData.zipCode} onChange={handleInputChange} className="w-full p-3 bg-white rounded-xl border border-slate-200" /></div>
+                                        <div><label className="text-xs font-bold text-slate-500">Country</label><input name="country" value={formData.country} onChange={handleInputChange} className="w-full p-3 bg-white rounded-xl border border-slate-200" /></div>
+                                    </div>
                                 </div>
-
-                                {/* Back Upload */}
-                                <div className="mb-8">
-                                    <label className="text-sm font-bold text-slate-700 mb-2 block">Back Side</label>
-                                    {!files.back ? (
-                                        <label className="border-2 border-dashed border-slate-200 rounded-2xl h-32 flex flex-col items-center justify-center cursor-pointer hover:bg-slate-50 transition">
-                                            <UploadCloud className="text-blue-600 mb-2" size={24} />
-                                            <p className="text-sm font-bold text-slate-500">Click to upload Back</p>
-                                            <input type="file" className="hidden" onChange={(e) => handleFileChange('back', e)} accept="image/*,.pdf" />
-                                        </label>
-                                    ) : (
-                                        <div className="bg-green-50 border border-green-100 rounded-2xl p-4 flex items-center justify-between">
-                                            <span className="text-sm font-bold text-slate-900">{files.back.name}</span>
-                                            <button onClick={() => removeFile('back')} className="p-2 text-red-500"><X size={18} /></button>
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className="flex gap-4">
-                                    <button onClick={() => setStep(1)} className="flex-1 py-4 font-bold text-slate-500 bg-slate-100 rounded-xl">Back</button>
-                                    <button 
-                                        onClick={() => setStep(3)} 
-                                        disabled={!files.front || !files.back}
-                                        className="flex-[2] bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl disabled:opacity-50"
-                                    >
-                                        Continue
-                                    </button>
+                                <div className="flex gap-4 mt-6">
+                                    <button onClick={() => setStep(1)} className="flex-1 bg-slate-100 py-3 rounded-xl font-bold text-slate-500">Back</button>
+                                    <button onClick={() => setStep(3)} disabled={!formData.streetAddress || !formData.city} className="flex-[2] bg-blue-600 text-white py-3 rounded-xl font-bold disabled:opacity-50">Next Step</button>
                                 </div>
                             </div>
                         )}
 
-                        {/* --- STEP 3: LIVE CAMERA CHECK --- */}
+                        {/* STEP 3: ID Upload */}
                         {step === 3 && (
-                            <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100 animate-in fade-in slide-in-from-right-8">
-                                <h3 className="text-xl font-bold text-slate-900 mb-2 flex items-center gap-2">
-                                    <Camera className="text-blue-600" /> Face Verification
-                                </h3>
-                                <p className="text-slate-500 text-sm mb-6">Position your face in the frame to prove liveness.</p>
+                            <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100">
+                                <h3 className="text-xl font-bold mb-6">Identity Document</h3>
+                                <div className="space-y-4 mb-6">
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-500">Document Type</label>
+                                        <select name="idType" value={formData.idType} onChange={handleInputChange} className="w-full p-3 bg-white rounded-xl border border-slate-200">
+                                            <option>National ID</option>
+                                            <option>Passport</option>
+                                            <option>Driver License</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-500">ID Number</label>
+                                        <input name="idNumber" value={formData.idNumber} onChange={handleInputChange} className="w-full p-3 bg-white rounded-xl border border-slate-200" placeholder="Enter ID Number" />
+                                    </div>
+                                </div>
 
-                                <div className="mb-8 relative rounded-3xl overflow-hidden bg-slate-900 aspect-[3/4] max-w-sm mx-auto shadow-2xl">
-                                    
-                                    {/* STATE 1: IDLE / CAPTURED */}
-                                    {!isCameraActive && (
-                                        <div className="absolute inset-0 flex flex-col items-center justify-center text-white z-20 bg-slate-900">
-                                            {files.selfie ? (
-                                                <>
-                                                    <div className="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mb-4">
-                                                        <CheckCircle size={40} />
-                                                    </div>
-                                                    <p className="font-bold text-lg">Face Captured</p>
-                                                    <button onClick={() => setFiles(prev => ({...prev, selfie: null}))} className="mt-4 text-sm text-slate-400 underline hover:text-white">Retake Photo</button>
-                                                </>
+                                <div className="grid grid-cols-2 gap-4">
+                                    {['front', 'back'].map(side => (
+                                        <div key={side}>
+                                            <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">{side} Side</label>
+                                            {!files[side] ? (
+                                                <label className="border-2 border-dashed border-slate-200 rounded-xl h-32 flex flex-col items-center justify-center cursor-pointer hover:bg-slate-50">
+                                                    <UploadCloud className="text-blue-600 mb-1" size={20} />
+                                                    <span className="text-xs text-slate-400">Upload</span>
+                                                    <input type="file" className="hidden" onChange={(e) => handleFileChange(side, e)} accept="image/*" />
+                                                </label>
                                             ) : (
-                                                <>
-                                                    <div className="w-20 h-20 bg-slate-800 rounded-full flex items-center justify-center mb-4 animate-pulse">
-                                                        <User size={40} className="text-slate-500" />
-                                                    </div>
-                                                    <p className="font-bold text-lg mb-6">Ready to Scan</p>
-                                                    <button 
-                                                        onClick={startCamera} 
-                                                        className="px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-full transition shadow-lg shadow-blue-500/50"
-                                                    >
-                                                        Start Camera
-                                                    </button>
-                                                </>
+                                                <div className="bg-green-50 border border-green-100 rounded-xl h-32 flex flex-col items-center justify-center relative">
+                                                    <CheckCircle className="text-green-600 mb-1" size={20} />
+                                                    <span className="text-xs text-green-700 font-bold">Uploaded</span>
+                                                    <button onClick={() => removeFile(side)} className="absolute top-1 right-1 p-1 bg-white rounded-full shadow text-red-500"><X size={12}/></button>
+                                                </div>
                                             )}
                                         </div>
-                                    )}
+                                    ))}
+                                </div>
 
-                                    {/* VIDEO ELEMENT */}
-                                    <video 
-                                        ref={videoRef} 
-                                        autoPlay 
-                                        playsInline 
-                                        muted 
-                                        className={`absolute inset-0 w-full h-full object-cover ${isCameraActive ? 'opacity-100' : 'opacity-0'}`} 
-                                    />
+                                <div className="flex gap-4 mt-6">
+                                    <button onClick={() => setStep(2)} className="flex-1 bg-slate-100 py-3 rounded-xl font-bold text-slate-500">Back</button>
+                                    <button onClick={() => setStep(4)} disabled={!files.front || !files.back || !formData.idNumber} className="flex-[2] bg-blue-600 text-white py-3 rounded-xl font-bold disabled:opacity-50">Next Step</button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* STEP 4: Camera */}
+                        {step === 4 && (
+                            <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100">
+                                <h3 className="text-xl font-bold mb-4">Face Verification</h3>
+                                <div className="relative rounded-3xl overflow-hidden bg-slate-900 aspect-[3/4] max-w-sm mx-auto shadow-2xl mb-6">
+                                    <video ref={videoRef} autoPlay playsInline muted className={`absolute inset-0 w-full h-full object-cover ${isCameraActive ? 'opacity-100' : 'opacity-0'}`} />
                                     <canvas ref={canvasRef} className="hidden" />
-
-                                    {/* STATE 2: SCANNING OVERLAY */}
+                                    
+                                    {!isCameraActive && !files.selfie && (
+                                        <div className="absolute inset-0 flex items-center justify-center bg-slate-900">
+                                            <button onClick={startCamera} className="bg-blue-600 text-white px-8 py-3 rounded-full font-bold">Start Camera</button>
+                                        </div>
+                                    )}
+                                    {files.selfie && (
+                                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/90 text-white">
+                                            <CheckCircle size={48} className="text-green-500 mb-2"/>
+                                            <p className="font-bold">Photo Captured</p>
+                                            <button onClick={() => setFiles(prev => ({...prev, selfie: null}))} className="text-sm underline mt-2 text-slate-300">Retake</button>
+                                        </div>
+                                    )}
                                     {isCameraActive && (
-                                        <>
-                                            {/* Dark Mask with Oval Cutout */}
-                                            <div className="absolute inset-0 bg-slate-900/60 z-10">
-                                                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-64 border-2 border-white/50 rounded-[50%] shadow-[0_0_0_9999px_rgba(15,23,42,0.8)] overflow-hidden">
-                                                     {/* Scanning Line Animation */}
-                                                     <div className="w-full h-1 bg-green-500/80 shadow-[0_0_15px_rgba(34,197,94,1)] animate-[scan_2s_ease-in-out_infinite]"></div>
-                                                 </div>
-                                            </div>
-
-                                            {/* Instructions */}
-                                            <div className="absolute top-8 left-0 w-full text-center z-20">
-                                                <p className="text-white font-bold text-lg drop-shadow-md">Position face in oval</p>
-                                                <p className="text-white/70 text-sm mt-1">Hold still...</p>
-                                            </div>
-
-                                            {/* Capture Button */}
-                                            <div className="absolute bottom-8 left-0 w-full flex justify-center z-20">
-                                                <button 
-                                                    onClick={capturePhoto} 
-                                                    className="w-16 h-16 rounded-full border-4 border-white flex items-center justify-center hover:bg-white/20 transition"
-                                                >
-                                                    <div className="w-12 h-12 bg-white rounded-full"></div>
-                                                </button>
-                                            </div>
-                                        </>
+                                        <div className="absolute bottom-6 left-0 w-full flex justify-center z-20">
+                                            <button onClick={capturePhoto} className="w-16 h-16 rounded-full border-4 border-white flex items-center justify-center hover:bg-white/20"><div className="w-12 h-12 bg-white rounded-full"></div></button>
+                                        </div>
                                     )}
                                 </div>
-
-                                {/* Privacy Note */}
-                                <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl flex gap-3 mb-8">
-                                    <ShieldCheck className="text-blue-600 flex-shrink-0" size={20} />
-                                    <p className="text-xs text-blue-800 leading-relaxed font-medium">
-                                        We compare this photo with your ID document to verify your identity.
-                                    </p>
-                                </div>
-
-                                <div className="flex gap-4">
-                                    <button onClick={() => setStep(2)} className="flex-1 py-4 font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition">Back</button>
-                                    <button 
-                                        onClick={handleSubmit} 
-                                        disabled={!files.selfie || isSubmitting}
-                                        className="flex-[2] bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-500/20 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                                    >
-                                        {isSubmitting ? <Loader2 className="animate-spin" /> : 'Submit Verification'}
-                                    </button>
-                                </div>
+                                
+                                <button onClick={handleSubmit} disabled={!files.selfie || isSubmitting} className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold disabled:opacity-50 flex items-center justify-center gap-2">
+                                    {isSubmitting ? <Loader2 className="animate-spin" /> : 'Submit Verification'}
+                                </button>
                             </div>
                         )}
                     </>
                 )}
-
             </div>
         </div>
       </main>

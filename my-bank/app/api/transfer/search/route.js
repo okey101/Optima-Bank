@@ -1,0 +1,37 @@
+import { NextResponse } from 'next/server';
+import prisma from '../../../../lib/prisma';
+
+export async function POST(req) {
+  try {
+    const { query } = await req.json();
+
+    if (!query) return NextResponse.json({ message: 'Query required' }, { status: 400 });
+
+    // SEARCH LOGIC: Find by Email OR Account Number (UID)
+    const recipient = await prisma.user.findFirst({
+        where: {
+            OR: [
+                { email: query },           // Match Email
+                // If you have an accountNumber field in DB, uncomment below:
+                // { accountNumber: query } 
+            ]
+        },
+        select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            // accountNumber: true
+        }
+    });
+
+    if (!recipient) {
+        return NextResponse.json({ found: false }, { status: 404 });
+    }
+
+    return NextResponse.json({ found: true, recipient }, { status: 200 });
+
+  } catch (error) {
+    return NextResponse.json({ message: 'Error' }, { status: 500 });
+  }
+}

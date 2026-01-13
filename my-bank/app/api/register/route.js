@@ -6,24 +6,29 @@ import nodemailer from 'nodemailer';
 
 export async function POST(req) {
   try {
-    const { firstName, lastName, email, phone, password } = await req.json();
+    // 1. EXTRACT 'pin' ALONG WITH OTHER FIELDS
+    const { firstName, lastName, email, phone, password, pin } = await req.json();
 
+    // 2. CHECK IF USER EXISTS
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
       return NextResponse.json({ message: 'User already exists' }, { status: 400 });
     }
 
+    // 3. GENERATE WALLETS
     const userCount = await prisma.user.count();
     const walletIndex = userCount; // Sequential index: 0, 1, 2...
-
-    // --- GENERATE ALL 4 UNIQUE WALLETS ---
     const { ethAddress, btcAddress, solAddress, trxAddress } = generateWallet(walletIndex);
 
+    // 4. HASH PASSWORD AND PIN
     const hashedPassword = await bcrypt.hash(password, 10);
+    // ⚠️ NEW: Hash the PIN before saving it
+    const hashedPin = await bcrypt.hash(pin, 10); 
+
     const accountNumber = Math.floor(1000000000 + Math.random() * 9000000000).toString();
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // Send Email (Improved Anti-Spam Headers & Template)
+    // 5. SEND EMAIL (Your Original Template Restored)
     const transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
@@ -33,10 +38,9 @@ export async function POST(req) {
     });
 
     await transporter.sendMail({
-      from: `"Finora Security" <${process.env.GMAIL_USER}>`, // Adds a friendly name
+      from: `"Finora Security" <${process.env.GMAIL_USER}>`, 
       to: email,
       subject: 'Verify your Finora Account',
-      // PRO HTML EMAIL TEMPLATE
       html: `
         <!DOCTYPE html>
         <html>
@@ -71,14 +75,16 @@ export async function POST(req) {
         </body>
         </html>
       `,
-      text: `Welcome to Finora. Your verification code is ${verificationCode}` // Plain text fallback
+      text: `Welcome to Finora. Your verification code is ${verificationCode}`
     });
 
-    // Create User with ALL Addresses
+    // 6. CREATE USER (Now includes 'pin')
     await prisma.user.create({
       data: {
         firstName, lastName, email, phone, 
-        password: hashedPassword, accountNumber, 
+        password: hashedPassword, 
+        pin: hashedPin, // <--- ✅ PIN SAVED HERE
+        accountNumber, 
         balance: 0.00, walletIndex,
         ethAddress,
         btcAddress,

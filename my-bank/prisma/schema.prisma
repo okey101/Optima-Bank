@@ -1,3 +1,5 @@
+// prisma/schema.prisma
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -26,15 +28,33 @@ model User {
   solAddress       String   // Solana
   trxAddress       String   // Tron
   
-  // --- KYC FIELDS ---
+  // --- KYC FIELDS (UPDATED) ---
   kycStatus        String   @default("NOT_VERIFIED") // Options: NOT_VERIFIED, PENDING, VERIFIED, REJECTED
-  kycFront         String?  // Base64 Image
-  kycBack          String?  // Base64 Image
-  kycSelfie        String?  // Base64 Image
+  
+  // Images (Base64)
+  kycFront         String?
+  kycBack          String?
+  kycSelfie        String?
+  
+  // New Personal Details
+  dateOfBirth      String?
+  streetAddress    String?
+  city             String?
+  state            String?
+  zipCode          String?
+  country          String?
+  idType           String?  // e.g., "Passport", "Driver License"
+  idNumber         String?
   
   // --- SECURITY FIELDS ---
+  pin              String?  // Transaction PIN
   verificationCode String?  // For Email OTP
-  isEmailVerified  Boolean  @default(false) // <--- NEW FIELD: Blocks login until true
+  isEmailVerified  Boolean  @default(false)
+  
+  // Device Security
+  lastDevice       String?
+  loginOTP         String?
+  loginOTPExpires  DateTime?
   
   createdAt        DateTime @default(now())
 

@@ -1,0 +1,9 @@
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN "city" TEXT;
+ALTER TABLE "User" ADD COLUMN "country" TEXT;
+ALTER TABLE "User" ADD COLUMN "dateOfBirth" TEXT;
+ALTER TABLE "User" ADD COLUMN "idNumber" TEXT;
+ALTER TABLE "User" ADD COLUMN "idType" TEXT;
+ALTER TABLE "User" ADD COLUMN "state" TEXT;
+ALTER TABLE "User" ADD COLUMN "streetAddress" TEXT;
+ALTER TABLE "User" ADD COLUMN "zipCode" TEXT;
