@@ -1,491 +1,457 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Menu, Home, ArrowRightLeft, CreditCard, Settings, LogOut, Bell, 
-  ArrowUpRight, ArrowDownLeft, Loader2, RefreshCw, Wallet, Plus, 
-  Clock, CheckCircle, XCircle, Eye, EyeOff, Send, History, Download, 
-  ChevronRight, Smartphone, Zap, Globe, BarChart3, TrendingUp, 
-  User, ShieldAlert, ChevronDown, MoreHorizontal
+  Home, ArrowRightLeft, Wallet, CreditCard, Settings, LogOut, Bell, 
+  ArrowUpRight, ArrowDownLeft, Loader2, Menu, Eye, EyeOff, 
+  LayoutGrid, FileText, HelpCircle, Landmark, ShieldAlert, BarChart3,
+  Globe, Download, Send, Check, Copy, Repeat, X, ShieldCheck, UserCheck, 
+  Info, AlertTriangle, CheckCircle2, Zap, TrendingUp
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 
-// --- HELPER: LIVE CRYPTO PRICES (ROBUST VERSION) ---
-const useCryptoPrices = () => {
-  const [prices, setPrices] = useState({ 
-    BTC: 0, ETH: 0, SOL: 0, BNB: 0, 
-    XRP: 0, ADA: 0, DOGE: 0, TRX: 0, 
-    USDT: 1 
-  });
-  const [tickerData, setTickerData] = useState([]);
+// --- UTILS ---
+const formatCurrency = (val) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val || 0);
+const formatDate = (d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
-  useEffect(() => {
-    const fetchPrices = async () => {
-      try {
-        // 1. Define Symbols
-        const symbolList = [
-            "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", 
-            "XRPUSDT", "ADAUSDT", "DOGEUSDT", "TRXUSDT",
-            "MATICUSDT", "DOTUSDT", "LTCUSDT", "AVAXUSDT", "LINKUSDT"
-        ];
-        
-        // 2. Properly Encode URL for Browser Fetch
-        const encodedSymbols = encodeURIComponent(JSON.stringify(symbolList));
-        const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbols=${encodedSymbols}`);
-        
-        if (!res.ok) throw new Error("Network response was not ok");
+// --- MOCK NOTIFICATIONS ---
+const INITIAL_NOTIFICATIONS = [
+  { id: 1, type: 'transaction', title: 'Deposit Received', message: 'You have received $5,000.00 from Upwork Escrow Inc.', time: '2 mins ago', read: false },
+  { id: 2, type: 'system', title: 'Security Alert', message: 'New login detected from iPhone 14 Pro in Lagos, NG.', time: '1 hour ago', read: false },
+  { id: 3, type: 'transaction', title: 'Transfer Successful', message: 'Your transfer of $200.00 to Sarah James was successful.', time: '5 hours ago', read: true },
+];
 
-        const data = await res.json();
-        
-        const newPrices = { USDT: 1 };
-        const newTicker = [];
-
-        data.forEach(item => {
-          const symbol = item.symbol.replace('USDT', '');
-          const price = parseFloat(item.lastPrice);
-          newPrices[symbol] = price;
-          
-          newTicker.push({
-            symbol,
-            price: price.toLocaleString('en-US', { style: 'currency', currency: 'USD' }),
-            change: parseFloat(item.priceChangePercent).toFixed(2) + '%'
-          });
-        });
-        
-        setPrices(prev => ({ ...prev, ...newPrices }));
-        setTickerData(newTicker);
-
-      } catch (e) { 
-        console.warn("Crypto API Failed (using fallback data):", e);
-        
-        // 3. FALLBACK DATA (So it never shows just 'Loading...')
-        const fallbackTicker = [
-            { symbol: 'BTC', price: '$96,432.10', change: '+2.45%' },
-            { symbol: 'ETH', price: '$3,456.78', change: '+1.20%' },
-            { symbol: 'SOL', price: '$198.45', change: '-0.50%' },
-            { symbol: 'BNB', price: '$612.30', change: '+0.15%' },
-            { symbol: 'XRP', price: '$0.85', change: '+5.00%' },
-            { symbol: 'ADA', price: '$1.20', change: '-1.10%' },
-            { symbol: 'DOGE', price: '$0.15', change: '+3.20%' },
-            { symbol: 'TRX', price: '$0.14', change: '+0.50%' },
-        ];
-        
-        setTickerData(fallbackTicker);
-        
-        // Set basic prices for portfolio calculations
-        setPrices(prev => ({
-            ...prev,
-            BTC: 96432, ETH: 3456, SOL: 198, BNB: 612, 
-            XRP: 0.85, ADA: 1.20, DOGE: 0.15, TRX: 0.14
-        }));
-      }
-    };
-
-    fetchPrices();
-    const interval = setInterval(fetchPrices, 15000); // Update every 15s to respect rate limits
-    return () => clearInterval(interval);
-  }, []);
-
-  return { prices, tickerData };
-};
-
-// --- COMPONENT: SCROLLING TICKER (UPDATED) ---
-const CryptoTicker = ({ data }) => (
-  <div className="bg-slate-900 text-white text-xs py-2 overflow-hidden border-b border-slate-800 flex">
-    {/* We render the list TWICE ([...data, ...data]) inside the wrapper.
-       The CSS animation moves the wrapper by -50% (the width of one list).
-       When it reaches the end, it snaps back to 0 instantly, creating a perfect loop.
-    */}
-    <div className="animate-scroll whitespace-nowrap hover:paused">
-      {[...data, ...data].map((coin, i) => (
-        <span key={i} className="mx-6 font-mono font-bold inline-flex items-center gap-2">
-          <span className="text-slate-400">{coin.symbol}</span> 
-          <span className="text-white">{coin.price}</span>
-          <span className={`${coin.change.startsWith('-') ? 'text-red-400' : 'text-green-400'}`}>
-            {coin.change}
-          </span>
-        </span>
-      ))}
+// --- COMPONENTS ---
+const MenuGridItem = ({ icon: Icon, label, color, onClick, badge }) => (
+  <button onClick={onClick} className="relative flex flex-col items-center justify-center gap-2 p-3 md:p-4 bg-white border border-slate-100 rounded-2xl shadow-sm active:scale-95 transition-all duration-200 group">
+    {badge && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>}
+    <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center text-white shadow-md ${color}`}>
+      <Icon size={20} className="md:w-6 md:h-6" />
     </div>
+    <span className="text-[10px] md:text-xs font-bold text-slate-600 group-hover:text-slate-900 text-center leading-tight">{label}</span>
+  </button>
+);
+
+const BigActionButton = ({ icon: Icon, label, color, onClick }) => (
+  <button onClick={onClick} className="flex flex-col items-start justify-between p-4 h-28 md:h-32 bg-white border border-slate-100 rounded-2xl shadow-sm active:scale-95 transition-all duration-200 w-full">
+    <div className={`p-2.5 md:p-3 rounded-full ${color} text-white shadow-sm`}>
+      <Icon size={18} className="md:w-5 md:h-5" />
+    </div>
+    <p className="text-sm font-bold text-slate-800 mt-2">{label}</p>
+  </button>
+);
+
+const StatWidget = ({ label, value, icon: Icon, color, progress }) => (
+  <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+    <div className="flex items-center gap-3 md:gap-4 mb-2">
+      <div className={`w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center ${color} text-white shrink-0`}>
+        <Icon size={16} className="md:w-[18px]" />
+      </div>
+      <div>
+        <p className="text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-wider">{label}</p>
+        <p className="text-base md:text-lg font-bold text-slate-900">{value}</p>
+      </div>
+    </div>
+    {progress && (
+      <div className="w-full bg-slate-100 rounded-full h-1.5 mt-1">
+        <div className={`h-1.5 rounded-full ${color}`} style={{ width: `${progress}%` }}></div>
+      </div>
+    )}
   </div>
+);
+
+const SidebarLink = ({ icon: Icon, label, href, active }) => (
+  <Link href={href} className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all duration-200 ${active ? 'bg-blue-50 text-blue-600 font-bold' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
+    <Icon size={18} />
+    <span className="text-sm">{label}</span>
+  </Link>
 );
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { prices, tickerData } = useCryptoPrices();
   
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [showBalance, setShowBalance] = useState(true);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [showProfileMenu, setShowProfileMenu] = useState(false);
-  const [timeRange, setTimeRange] = useState('1M'); 
-
+  // --- STATE ---
   const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [hideBalance, setHideBalance] = useState(false);
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [copiedId, setCopiedId] = useState(false);
+
+  // Financial Data
+  const [portfolioValue, setPortfolioValue] = useState(0);
   const [transactions, setTransactions] = useState([]);
   const [assets, setAssets] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [kycStatus, setKycStatus] = useState('pending');
+  
+  // Notification State
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
+  const [activeNotifTab, setActiveNotifTab] = useState('all');
+  const notifRef = useRef(null);
 
-  const notifications = [
-    { id: 1, title: 'Deposit Received', msg: 'You received $0.10 from Base Network', time: '2m ago', unread: true },
-    { id: 2, title: 'Security Alert', msg: 'New login detected from Lagos, NG', time: '1h ago', unread: false },
-    { id: 3, title: 'Welcome!', msg: 'Account created successfully.', time: '1d ago', unread: false },
-  ];
+  // Quick Exchange State
+  const [convertFrom, setConvertFrom] = useState('USDT');
+  const [convertTo, setConvertTo] = useState('BTC');
+  const [convertAmount, setConvertAmount] = useState('');
+  const [isConverting, setIsConverting] = useState(false);
+  const [convertSuccess, setConvertSuccess] = useState(false);
+  const [convertMsg, setConvertMsg] = useState('');
 
-  // --- 1. FETCH DATA & SYNC STATUS ---
+  // CLOCK
   useEffect(() => {
-    const fetchData = async () => {
-        const storedUser = localStorage.getItem('user');
-        if (!storedUser) { router.push('/login'); return; }
-        
-        let currentUser = JSON.parse(storedUser);
-        setUser(currentUser); 
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
-        try {
-            // A. Get Transactions
-            const txRes = await fetch('/api/transactions', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: currentUser.email })
-            });
-            
-            if (txRes.ok) {
-                const txData = await txRes.json();
-                setTransactions(txData);
-                calculateAssets(txData); 
-            }
+  // CLOSE NOTIF
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (notifRef.current && !notifRef.current.contains(event.target)) setShowNotifications(false);
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [notifRef]);
 
-            // B. SYNC LATEST STATUS
-            const statusRes = await fetch('/api/user/status', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: currentUser.email })
-            });
+  // DATA FETCHING
+  const refreshData = async () => {
+      const stored = localStorage.getItem('user');
+      if (!stored) { router.push('/login'); return; }
+      const currentUser = JSON.parse(stored);
+      setUser(currentUser);
+      setKycStatus(currentUser.kycStatus || 'pending'); 
 
-            if (statusRes.ok) {
-                const latestData = await statusRes.json();
-                if (latestData.kycStatus !== currentUser.kycStatus || latestData.balance !== currentUser.balance) {
-                    const updatedUser = { ...currentUser, ...latestData };
-                    setUser(updatedUser);
-                    localStorage.setItem('user', JSON.stringify(updatedUser));
-                }
-            }
-
-        } catch (error) { console.error("Sync Error", error); } 
-        finally { setIsLoading(false); }
-    };
-    fetchData();
-  }, [router]);
-
-  // --- ASSET CALCULATION ---
-  const calculateAssets = (txs) => {
-    const holdingsUSD = { 
-        ETH: 0, BTC: 0, SOL: 0, BNB: 0, 
-        XRP: 0, ADA: 0, DOGE: 0, TRX: 0, 
-        USDT: 0 
-    };
-    
-    // Sum up approved deposits
-    txs.forEach(tx => {
-        if (tx.type === 'DEPOSIT' && tx.status === 'APPROVED') {
-            const method = tx.method ? tx.method.toUpperCase() : '';
-            if (method.includes('USDT') || method.includes('TETHER')) holdingsUSD.USDT += tx.amount;
-            else if (method.includes('ETH') || method.includes('ERC20') || method.includes('BASE')) holdingsUSD.ETH += tx.amount;
-            else if (method.includes('BTC') || method.includes('BITCOIN')) holdingsUSD.BTC += tx.amount;
-            else if (method.includes('TRX') || method.includes('TRON')) holdingsUSD.TRX += tx.amount;
-            else if (method.includes('SOL')) holdingsUSD.SOL += tx.amount;
-            else if (method.includes('BNB') || method.includes('BSC')) holdingsUSD.BNB += tx.amount;
-            else if (method.includes('XRP')) holdingsUSD.XRP += tx.amount;
-            else if (method.includes('ADA')) holdingsUSD.ADA += tx.amount;
-            else if (method.includes('DOGE')) holdingsUSD.DOGE += tx.amount;
+      try {
+        const res = await fetch('/api/transactions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: currentUser.email })
+        });
+        if (res.ok) {
+            const txs = await res.json();
+            setTransactions(txs);
+            const total = txs.reduce((acc, tx) => {
+                if (tx.status !== 'APPROVED') return acc;
+                const val = parseFloat(tx.amount);
+                return tx.type === 'DEPOSIT' ? acc + val : acc - val;
+            }, 0);
+            setPortfolioValue(total > 0 ? total : 0);
+            setAssets([{symbol:'USDT', usdVal: total}, {symbol:'BTC', usdVal: 0}]); 
         }
-    });
+      } catch (e) { console.error("Sync Error", e); } 
+      finally { setLoading(false); }
+  };
 
-    const allAssets = [
-        { id: 'usdt', name: 'Tether', symbol: 'USDT', icon: 'https://cryptologos.cc/logos/tether-usdt-logo.svg?v=026', usdValue: holdingsUSD.USDT },
-        { id: 'btc', name: 'Bitcoin', symbol: 'BTC', icon: 'https://cryptologos.cc/logos/bitcoin-btc-logo.svg?v=026', usdValue: holdingsUSD.BTC },
-        { id: 'eth', name: 'Ethereum', symbol: 'ETH', icon: 'https://cryptologos.cc/logos/ethereum-eth-logo.svg?v=026', usdValue: holdingsUSD.ETH },
-        { id: 'sol', name: 'Solana', symbol: 'SOL', icon: 'https://cryptologos.cc/logos/solana-sol-logo.svg?v=026', usdValue: holdingsUSD.SOL },
-        { id: 'bnb', name: 'BNB', symbol: 'BNB', icon: 'https://cryptologos.cc/logos/bnb-bnb-logo.svg?v=026', usdValue: holdingsUSD.BNB },
-        { id: 'xrp', name: 'XRP', symbol: 'XRP', icon: 'https://cryptologos.cc/logos/xrp-xrp-logo.svg?v=026', usdValue: holdingsUSD.XRP },
-        { id: 'trx', name: 'TRON', symbol: 'TRX', icon: 'https://cryptologos.cc/logos/tron-trx-logo.svg?v=026', usdValue: holdingsUSD.TRX },
-        { id: 'doge', name: 'Dogecoin', symbol: 'DOGE', icon: 'https://cryptologos.cc/logos/dogecoin-doge-logo.svg?v=026', usdValue: holdingsUSD.DOGE },
-        { id: 'ada', name: 'Cardano', symbol: 'ADA', icon: 'https://cryptologos.cc/logos/cardano-ada-logo.svg?v=026', usdValue: holdingsUSD.ADA },
-    ];
+  useEffect(() => { refreshData(); }, [router]);
 
-    const sortedAssets = allAssets.sort((a, b) => b.usdValue - a.usdValue);
-    setAssets(sortedAssets.slice(0, 4));
+  // UTILS
+  const unreadCount = notifications.filter(n => !n.read).length;
+  const filteredNotifications = notifications.filter(n => {
+      if (activeNotifTab === 'all') return true;
+      return n.type === activeNotifTab;
+  });
+  const markAllRead = () => setNotifications(prev => prev.map(n => ({...n, read: true})));
+
+  const handleConvert = async () => {
+    setIsConverting(true);
+    setTimeout(() => {
+        setIsConverting(false);
+        setConvertSuccess(true);
+        setConvertMsg('Success');
+        setTimeout(() => setConvertSuccess(false), 2000);
+    }, 1500);
+  };
+
+  const copyAccountId = () => {
+    if (user?.accountNumber) {
+        navigator.clipboard.writeText(user.accountNumber);
+        setCopiedId(true);
+        setTimeout(() => setCopiedId(false), 2000);
+    }
   };
 
   const handleLogout = () => { localStorage.removeItem('user'); router.push('/login'); };
-  
-  const formatCurrency = (amount) => {
-    if (!showBalance) return '••••••';
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount || 0);
-  };
 
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-  };
-
-  if (isLoading) return <div className="min-h-screen bg-slate-50 flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" size={40} /></div>;
-  if (!user) return null;
+  if (loading || !user) return <div className="min-h-screen bg-slate-50 flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" size={40}/></div>;
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans flex text-slate-900">
+    // ✅ 1. OUTER CONTAINER: h-screen + overflow-hidden (Locks Window Scroll)
+    <div className="h-screen w-full bg-slate-50 font-sans flex text-slate-900 overflow-hidden">
       
-      {/* SIDEBAR */}
-      {isSidebarOpen && <div className="fixed inset-0 bg-slate-900/50 z-40 lg:hidden backdrop-blur-sm" onClick={() => setIsSidebarOpen(false)}></div>}
-      <aside className={`fixed top-0 left-0 z-50 h-screen w-72 bg-white border-r border-slate-200 lg:translate-x-0 lg:static ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} transition-transform duration-300`}>
-        <div className="h-28 flex items-center justify-center border-b border-slate-100">
-             <div className="relative w-48 h-16"><Image src="/logo.png" alt="Finora Logo" fill className="object-contain" priority /></div>
-        </div>
-        <nav className="p-6 space-y-2">
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 px-3">Main Menu</p>
-            <Link href="/dashboard" className="flex items-center gap-3 px-4 py-3 bg-blue-50 text-blue-600 rounded-xl font-bold transition"><Home size={20} /> Dashboard</Link>
-            <Link href="/dashboard/transactions" className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 hover:text-blue-600 rounded-xl font-medium transition"><ArrowRightLeft size={20} /> Transactions</Link>
-            <Link href="/dashboard/deposit" className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 hover:text-blue-600 rounded-xl font-medium transition"><Wallet size={20} /> Deposit</Link>
-            <Link href="/dashboard/cards" className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 hover:text-blue-600 rounded-xl font-medium transition"><CreditCard size={20} /> My Cards</Link>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mt-8 mb-4 px-3">Settings</p>
-            <Link href="/dashboard/settings" className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 hover:text-blue-600 rounded-xl font-medium transition"><Settings size={20} /> Settings</Link>
-            <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 rounded-xl font-medium transition"><LogOut size={20} /> Logout</button>
-        </nav>
-      </aside>
+      {/* CUSTOM SCROLLBAR STYLES */}
+      <style jsx global>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+      `}</style>
 
-      {/* MAIN CONTENT */}
-      <main className="flex-1 flex flex-col h-screen overflow-hidden relative bg-slate-50/50">
-        <CryptoTicker data={tickerData.length > 0 ? tickerData : [{symbol:'BTC', price:'Loading...', change:'0.00%'}]} />
+      {/* MOBILE SIDEBAR OVERLAY */}
+      {sidebarOpen && <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm transition-opacity" onClick={() => setSidebarOpen(false)} />}
+      
+      {/* ✅ 2. SIDEBAR: h-full, Flex Column, Independent Scroll */}
+      <aside className={`fixed inset-y-0 left-0 z-50 w-72 bg-white border-r border-slate-200 transform transition-transform duration-300 lg:static lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} flex flex-col h-full shrink-0`}>
         
-        {/* HEADER */}
-        <header className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-200 flex items-center justify-between px-6 lg:px-10 shrink-0 sticky top-0 z-30">
-            <div className="flex items-center gap-4">
-                <button className="lg:hidden p-2 text-slate-600 hover:bg-slate-100 rounded-lg" onClick={() => setIsSidebarOpen(true)}><Menu size={24} /></button>
-                <div>
-                    <h1 className="text-xl font-bold text-slate-900 hidden md:block">Hello, {user.firstName}</h1>
-                    <p className="text-xs text-slate-500 font-medium hidden md:block">
-                        {user.kycStatus === 'VERIFIED' ? <span className="text-green-600 font-bold flex items-center gap-1"><CheckCircle size={10}/> Verified Account</span> : 'Standard Account'}
-                    </p>
+        {/* LOGO (Fixed) */}
+        <div className="h-20 flex items-center justify-between px-6 border-b border-slate-100 shrink-0">
+             <div className="relative w-32 h-10"><Image src="/logo.png" alt="Logo" fill className="object-contain" priority /></div>
+             <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-slate-400"><X size={24}/></button>
+        </div>
+        
+        {/* USER PROFILE (Fixed) */}
+        <div className="p-6 border-b border-slate-100 shrink-0">
+            <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold text-lg">
+                    {user.firstName[0]}
+                </div>
+                <div className="overflow-hidden">
+                    <p className="text-sm font-bold text-slate-900 truncate">{user.firstName} {user.lastName}</p>
+                    <p className="text-xs text-slate-400 truncate">{user.email}</p>
                 </div>
             </div>
-            <div className="flex items-center gap-4 lg:gap-6">
-                <div className="relative">
-                    <button onClick={() => { setShowNotifications(!showNotifications); setShowProfileMenu(false); }} className="relative p-2 text-slate-600 hover:bg-slate-100 rounded-full transition"><Bell size={22} />{notifications.some(n => n.unread) && <span className="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>}</button>
+            {kycStatus !== 'verified' && (
+                <Link href="/dashboard/kyc" className="mt-4 flex items-center justify-center gap-2 w-full bg-red-50 text-red-600 border border-red-100 py-2.5 rounded-xl text-xs font-bold hover:bg-red-100 transition">
+                    <ShieldAlert size={14} /> Verify Identity
+                </Link>
+            )}
+        </div>
+
+        {/* NAV LINKS (Scrollable Area) */}
+        <nav className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
+            <div>
+                <p className="px-4 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Main Menu</p>
+                <div className="space-y-1">
+                    <SidebarLink href="/dashboard" icon={Home} label="Dashboard" active={true} />
+                    <SidebarLink href="/dashboard/transactions" icon={ArrowRightLeft} label="Transactions" />
+                    <SidebarLink href="/dashboard/cards" icon={CreditCard} label="My Cards" />
+                    <SidebarLink href="/dashboard/transfer" icon={Send} label="Transfer Money" />
+                    <SidebarLink href="/dashboard/deposit" icon={Download} label="Deposit Funds" />
+                </div>
+            </div>
+            <div>
+                <p className="px-4 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Services</p>
+                <div className="space-y-1">
+                    <SidebarLink href="/dashboard/international" icon={Globe} label="International Wire" />
+                    <SidebarLink href="/dashboard/loans" icon={Landmark} label="Loan Services" />
+                    <SidebarLink href="/dashboard/bills" icon={Zap} label="Bill Payments" />
+                    <SidebarLink href="/dashboard/invest" icon={TrendingUp} label="Investments" />
+                    <SidebarLink href="/dashboard/tax" icon={FileText} label="IRS Tax Refund" />
+                </div>
+            </div>
+            <div>
+                <p className="px-4 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">System</p>
+                <div className="space-y-1">
+                    <SidebarLink href="/dashboard/kyc" icon={ShieldCheck} label="Verification Center" />
+                    <SidebarLink href="/dashboard/settings" icon={Settings} label="Settings" />
+                    <SidebarLink href="/dashboard/support" icon={HelpCircle} label="Help & Support" />
+                </div>
+            </div>
+        </nav>
+
+        {/* FOOTER (Fixed) */}
+        <div className="p-4 border-t border-slate-100 shrink-0">
+            <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 rounded-xl font-medium transition">
+                <LogOut size={18} /> <span className="text-sm">Log Out</span>
+            </button>
+        </div>
+      </aside>
+
+      {/* ✅ 3. MAIN CONTENT: h-full, Independent Scroll */}
+      <main className="flex-1 flex flex-col h-full w-full relative overflow-hidden">
+        
+        {/* HEADER (Fixed) */}
+        <header className="h-16 md:h-20 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-8 shrink-0 z-30">
+            <div className="flex items-center gap-3">
+                <button onClick={() => setSidebarOpen(true)} className="lg:hidden p-2 -ml-2 text-slate-600 hover:bg-slate-100 rounded-full transition"><Menu size={24} /></button>
+                <h1 className="text-lg md:text-xl font-bold text-slate-900 lg:hidden">Dashboard</h1>
+                <div className="hidden lg:block">
+                    <p className="text-sm font-bold text-slate-400 mb-0.5">Good Afternoon,</p>
+                    <h1 className="text-xl font-bold text-slate-900">{user.firstName}</h1>
+                </div>
+            </div>
+            
+            <div className="flex items-center gap-3 md:gap-6">
+                <div className="hidden md:block text-right">
+                    <p className="text-xl font-bold text-slate-900 font-mono tracking-tight">
+                        {currentTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                    </p>
+                    <p className="text-xs text-slate-400 font-bold">{currentTime.toLocaleDateString([], {weekday: 'long', month: 'long', day:'numeric'})}</p>
+                </div>
+                
+                {/* NOTIFICATION */}
+                <div className="relative" ref={notifRef}>
+                    <button onClick={() => setShowNotifications(!showNotifications)} className={`relative p-2 rounded-full transition ${showNotifications ? 'bg-blue-100 text-blue-600' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'}`}>
+                        <Bell size={20} />
+                        {unreadCount > 0 && <span className="absolute top-1.5 right-2 w-2 h-2 bg-red-500 rounded-full border border-white animate-pulse"></span>}
+                    </button>
                     {showNotifications && (
-                        <div className="absolute top-12 right-0 w-80 bg-white border border-slate-100 shadow-2xl rounded-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 z-50">
-                            <div className="px-4 py-3 border-b border-slate-50 flex justify-between items-center bg-slate-50/50"><h4 className="font-bold text-slate-800 text-sm">Notifications</h4><span className="text-[10px] bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full font-bold">3 New</span></div>
-                            <div className="max-h-64 overflow-y-auto">
-                                {notifications.map((note) => (<div key={note.id} className="px-4 py-3 hover:bg-slate-50 border-b border-slate-50 last:border-0 transition cursor-pointer"><div className="flex justify-between items-start mb-1"><p className="text-sm font-bold text-slate-800">{note.title}</p><span className="text-[10px] text-slate-400">{note.time}</span></div><p className="text-xs text-slate-500 leading-relaxed">{note.msg}</p></div>))}
+                        <div className="absolute top-12 right-0 w-80 md:w-96 bg-white border border-slate-100 shadow-2xl rounded-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
+                            <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                                <h3 className="font-bold text-slate-800">Notifications</h3>
+                                <button onClick={markAllRead} className="text-[10px] font-bold text-blue-600 hover:underline">Mark all as read</button>
                             </div>
+                            <div className="flex p-2 gap-1 border-b border-slate-100 bg-white sticky top-0 z-10">
+                                {['all', 'transaction', 'system'].map(tab => (
+                                    <button key={tab} onClick={() => setActiveNotifTab(tab)} className={`flex-1 py-1.5 text-xs font-bold rounded-lg capitalize transition ${activeNotifTab === tab ? 'bg-slate-100 text-slate-900' : 'text-slate-400 hover:bg-slate-50'}`}>
+                                        {tab === 'all' ? 'All' : (tab === 'transaction' ? 'Transactions' : 'System')}
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="max-h-80 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+                                {filteredNotifications.length > 0 ? (
+                                    filteredNotifications.map(notif => (
+                                        <div key={notif.id} className={`flex gap-3 p-3 rounded-xl hover:bg-slate-50 transition cursor-pointer group ${!notif.read ? 'bg-blue-50/50' : ''}`}>
+                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${notif.type === 'transaction' ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'}`}>
+                                                {notif.type === 'transaction' ? <ArrowDownLeft size={16}/> : <ShieldAlert size={16}/>}
+                                            </div>
+                                            <div className="flex-1">
+                                                <div className="flex justify-between items-start">
+                                                    <p className={`text-xs font-bold ${!notif.read ? 'text-slate-900' : 'text-slate-600'}`}>{notif.title}</p>
+                                                    <span className="text-[10px] text-slate-400 whitespace-nowrap ml-2">{notif.time}</span>
+                                                </div>
+                                                <p className="text-[11px] text-slate-500 leading-tight mt-0.5 line-clamp-2">{notif.message}</p>
+                                            </div>
+                                            {!notif.read && <div className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shrink-0"></div>}
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="py-8 text-center"><Bell size={24} className="text-slate-200 mx-auto mb-2"/><p className="text-xs text-slate-400">No notifications found.</p></div>
+                                )}
+                            </div>
+                            <div className="p-2 border-t border-slate-100 bg-slate-50/50 text-center"><Link href="/dashboard/settings" className="text-[10px] font-bold text-slate-500 hover:text-slate-800">Notification Settings</Link></div>
                         </div>
                     )}
                 </div>
-                <div className="relative pl-6 border-l border-slate-200">
-                    <button onClick={() => { setShowProfileMenu(!showProfileMenu); setShowNotifications(false); }} className="flex items-center gap-3 hover:bg-slate-50 p-1.5 pr-3 rounded-full transition border border-transparent hover:border-slate-100">
-                        <div className="text-right hidden md:block"><p className="text-sm font-bold text-slate-800 leading-none">{user.firstName} {user.lastName}</p><p className="text-[10px] text-slate-500 font-medium pt-1">Profile</p></div>
-                        <div className="w-9 h-9 bg-gradient-to-tr from-blue-600 to-indigo-600 text-white rounded-full flex items-center justify-center font-bold text-sm shadow-lg shadow-blue-500/20 uppercase ring-2 ring-white">{user.firstName[0]}</div>
-                        <ChevronDown size={16} className={`text-slate-400 transition-transform ${showProfileMenu ? 'rotate-180' : ''}`} />
-                    </button>
-                    {showProfileMenu && (
-                        <div className="absolute top-14 right-0 w-60 bg-white border border-slate-100 shadow-xl rounded-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 z-50">
-                            <div className="p-2">
-                                <Link href="/dashboard/profile" className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 rounded-xl text-slate-600 hover:text-blue-600 transition font-medium text-sm group"><User size={18} className="text-slate-400 group-hover:text-blue-600" /> My Profile</Link>
-                                <Link href="/dashboard/kyc" className="flex items-center justify-between px-3 py-2.5 hover:bg-slate-50 rounded-xl text-slate-600 hover:text-blue-600 transition font-medium text-sm group"><div className="flex items-center gap-3"><ShieldAlert size={18} className="text-slate-400 group-hover:text-blue-600" /> Verification</div><span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${user.kycStatus === 'VERIFIED' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>{user.kycStatus === 'VERIFIED' ? 'Verified' : 'Required'}</span></Link>
-                            </div>
-                            <div className="h-px bg-slate-100 mx-2"></div>
-                            <div className="p-2"><button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-red-50 rounded-xl text-red-600 transition font-medium text-sm"><LogOut size={18} /> Logout</button></div>
-                        </div>
-                    )}
+                <div className="w-9 h-9 bg-slate-900 text-white rounded-full flex items-center justify-center font-bold text-sm shadow-lg ring-2 ring-white">
+                    {user.firstName[0]}
                 </div>
             </div>
         </header>
 
-        {/* CONTENT */}
-        <div className="flex-1 overflow-y-auto p-4 lg:p-8 scroll-smooth pb-20">
-            <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+        {/* ✅ 4. SCROLLABLE DASHBOARD CONTENT */}
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-slate-50/50 custom-scrollbar">
+            <div className="max-w-6xl mx-auto space-y-6 md:space-y-8">
 
-                {/* --- 3. PRO PORTFOLIO SECTION --- */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    
-                    {/* LEFT: Portfolio Analytics Card */}
-                    <div className="lg:col-span-2 bg-gradient-to-b from-slate-900 to-slate-800 rounded-[2.5rem] p-8 text-white relative overflow-hidden shadow-2xl flex flex-col justify-between h-[24rem]">
-                        <div className="absolute inset-x-0 bottom-0 h-48 opacity-20 pointer-events-none">
-                             <svg viewBox="0 0 500 150" preserveAspectRatio="none" className="w-full h-full">
-                                <path d="M0,150 L0,100 C150,150 350,0 500,80 L500,150 Z" fill="url(#blueGradient)" />
-                                <defs>
-                                    <linearGradient id="blueGradient" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="0%" stopColor="#3b82f6" />
-                                        <stop offset="100%" stopColor="transparent" />
-                                    </linearGradient>
-                                </defs>
-                             </svg>
-                        </div>
-
-                        <div className="relative z-10 flex justify-between items-start">
-                            <div>
-                                <p className="text-slate-400 font-medium text-sm mb-1 flex items-center gap-2">
-                                    Total Portfolio
-                                    <button onClick={() => setShowBalance(!showBalance)} className="hover:text-white transition opacity-60">
-                                        {showBalance ? <Eye size={16}/> : <EyeOff size={16}/>}
-                                    </button>
-                                </p>
-                                <h2 className="text-5xl font-bold tracking-tight mb-2">
-                                    {formatCurrency(user.balance)}
-                                </h2>
-                                <div className="inline-flex items-center gap-2 text-green-400 bg-green-400/10 px-2 py-1 rounded-lg">
-                                    <TrendingUp size={16} />
-                                    <span className="font-bold text-sm">+2.4%</span>
+                {/* ROW 1 */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
+                    <div className="lg:col-span-2 space-y-6 md:space-y-8">
+                        {/* BANK CARD */}
+                        <div className="relative h-56 md:h-64 w-full bg-gradient-to-r from-sky-500 to-blue-700 rounded-3xl p-6 md:p-8 text-white shadow-xl overflow-hidden group">
+                            <div className="absolute -top-12 -right-12 w-48 h-48 bg-white/10 rounded-full blur-3xl"></div>
+                            <div className="absolute top-1/2 -left-12 w-32 h-32 bg-sky-300/20 rounded-full blur-2xl"></div>
+                            <div className="relative z-10 flex flex-col justify-between h-full">
+                                <div className="flex justify-between items-start">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white/20 flex items-center justify-center font-bold text-xs md:text-sm backdrop-blur-sm border border-white/10">DL</div>
+                                        <div className="hidden md:block"><p className="text-sky-100 text-xs">Standard Account</p><p className="text-sm font-bold">Active</p></div>
+                                    </div>
+                                    <button onClick={() => setHideBalance(!hideBalance)} className="opacity-80 hover:opacity-100 transition p-1">{hideBalance ? <EyeOff size={20}/> : <Eye size={20}/>}</button>
+                                </div>
+                                <div className="my-2 relative z-10"><p className="text-sky-100 text-xs md:text-sm font-medium mb-1">Available Balance</p><h1 className="text-4xl md:text-5xl font-bold tracking-tight">{hideBalance ? '••••••••' : formatCurrency(portfolioValue)}</h1></div>
+                                <div className="relative z-10 flex justify-between items-end">
+                                    <div><p className="text-[10px] text-sky-200 mb-1">Account Number</p><div className="flex items-center gap-2 bg-black/20 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/5"><span className="text-xs md:text-sm font-mono tracking-widest">{user.accountNumber}</span><button onClick={copyAccountId}><Copy size={12} className="text-sky-300 hover:text-white"/></button></div></div>
+                                    <div className="flex gap-2"><Link href="/dashboard/transactions" className="bg-white/10 border border-white/20 hover:bg-white/20 text-white px-3 md:px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition backdrop-blur-md"><ArrowRightLeft size={14} /> <span className="hidden sm:inline">History</span></Link><Link href="/dashboard/deposit" className="bg-white text-blue-600 px-3 md:px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 hover:bg-sky-50 transition shadow-lg"><ArrowDownLeft size={14} /> Top up</Link></div>
                                 </div>
                             </div>
-                            
-                            <div className="flex bg-white/10 rounded-xl p-1 backdrop-blur-sm border border-white/5">
-                                {['1D', '1W', '1M', '1Y'].map(t => (
-                                    <button key={t} onClick={() => setTimeRange(t)} className={`px-3 py-1 text-xs font-bold rounded-lg transition ${timeRange === t ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-white'}`}>{t}</button>
-                                ))}
-                            </div>
                         </div>
-
-                        <div className="relative z-10 grid grid-cols-3 gap-4 mt-8">
-                            <Link href="/dashboard/deposit" className="bg-blue-600 hover:bg-blue-500 text-white py-4 rounded-2xl font-bold text-sm flex flex-col items-center justify-center gap-1 transition shadow-lg shadow-blue-900/50 group border border-blue-500">
-                                <Plus size={20} className="mb-1 group-hover:scale-110 transition" /> 
-                                <span>Add Cash</span>
-                            </Link>
-                            <Link href="/dashboard/transfer" className="bg-slate-700/50 hover:bg-slate-700 text-white py-4 rounded-2xl font-bold text-sm flex flex-col items-center justify-center gap-1 transition backdrop-blur-sm border border-white/5">
-                                <ArrowUpRight size={20} className="mb-1" /> 
-                                <span>Transfer</span>
-                            </Link>
-                            <button className="bg-slate-700/50 hover:bg-slate-700 text-white py-4 rounded-2xl font-bold text-sm flex flex-col items-center justify-center gap-1 transition backdrop-blur-sm border border-white/5">
-                                <MoreHorizontal size={20} className="mb-1" /> 
-                                <span>More</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* RIGHT: Assets List */}
-                    <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[24rem]">
-                        <div className="p-6 border-b border-slate-100 flex justify-between items-center shrink-0">
-                            <h3 className="font-bold text-slate-900 text-lg">My Assets</h3>
-                            <Link href="/dashboard/deposit" className="text-blue-600 text-xs font-bold bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100">See All</Link>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                            {assets.map((asset) => {
-                                const usdValue = asset.usdValue;
-                                return (
-                                    <div key={asset.id} className="flex items-center justify-between p-3 hover:bg-slate-50 rounded-2xl transition cursor-pointer group">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-full bg-white border border-slate-100 p-1.5 shadow-sm group-hover:scale-110 transition">
-                                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                                <img src={asset.icon} alt={asset.name} className="w-full h-full object-contain" />
-                                            </div>
-                                            <div>
-                                                <p className="font-bold text-slate-900 text-sm">{asset.name}</p>
-                                                <p className="text-[10px] text-slate-500 font-bold bg-slate-100 px-1.5 rounded inline-block">{asset.symbol}</p>
-                                            </div>
-                                        </div>
-                                        <div className="text-right">
-                                            <p className="font-bold text-slate-900 text-sm">
-                                                {showBalance 
-                                                    ? (asset.symbol === 'USDT' ? asset.usdValue.toFixed(2) : (prices[asset.symbol] ? (asset.usdValue / prices[asset.symbol]).toFixed(4) : '0.00')) 
-                                                    : '••••'}
-                                            </p>
-                                            <p className="text-xs text-slate-400">
-                                                {showBalance ? formatCurrency(usdValue) : '••••'}
-                                            </p>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                </div>
-
-                {/* 4. ACTIONS (✅ FIXED: Transfer links to page) */}
-                <div>
-                    <h3 className="font-bold text-slate-900 mb-4 ml-1">Quick Actions</h3>
-                    <div className="grid grid-cols-4 md:grid-cols-8 gap-3">
-                        {[
-                            { icon: Wallet, label: 'Top Up', color: 'text-blue-600', bg: 'bg-blue-50', link: '/dashboard/deposit' },
-                            { icon: Send, label: 'Transfer', color: 'text-purple-600', bg: 'bg-purple-50', link: '/dashboard/transfer' },
-                            { icon: Smartphone, label: 'Airtime', color: 'text-orange-600', bg: 'bg-orange-50' },
-                            { icon: Zap, label: 'Bills', color: 'text-yellow-600', bg: 'bg-yellow-50' },
-                            { icon: Globe, label: 'Internet', color: 'text-cyan-600', bg: 'bg-cyan-50' },
-                            { icon: BarChart3, label: 'Invest', color: 'text-green-600', bg: 'bg-green-50' },
-                            { icon: Download, label: 'Withdraw', color: 'text-red-600', bg: 'bg-red-50' },
-                            { icon: Settings, label: 'More', color: 'text-slate-600', bg: 'bg-slate-50', link: '/dashboard/settings' },
-                        ].map((item, i) => (
-                            item.link ? (
-                                <Link href={item.link} key={i} className="flex flex-col items-center gap-2 group p-3 rounded-2xl hover:bg-white hover:shadow-sm transition-all duration-300 border border-transparent hover:border-slate-200">
-                                    <div className={`w-12 h-12 ${item.bg} ${item.color} rounded-xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform duration-300`}>
-                                        <item.icon size={22} />
-                                    </div>
-                                    <span className="text-[11px] font-bold text-slate-600 group-hover:text-slate-900">{item.label}</span>
-                                </Link>
-                            ) : (
-                                <button key={i} className="flex flex-col items-center gap-2 group p-3 rounded-2xl hover:bg-white hover:shadow-sm transition-all duration-300 border border-transparent hover:border-slate-200">
-                                    <div className={`w-12 h-12 ${item.bg} ${item.color} rounded-xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform duration-300`}>
-                                        <item.icon size={22} />
-                                    </div>
-                                    <span className="text-[11px] font-bold text-slate-600 group-hover:text-slate-900">{item.label}</span>
-                                </button>
-                            )
-                        ))}
-                    </div>
-                </div>
-
-                {/* 5. TRANSACTIONS */}
-                <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-8">
-                    <div className="flex justify-between items-center mb-8">
+                        {/* ACTIONS */}
                         <div>
-                            <h3 className="font-bold text-slate-900 text-lg">Transaction History</h3>
-                            <p className="text-slate-500 text-xs mt-1">Latest financial activity</p>
-                        </div>
-                        <Link href="/dashboard/transactions" className="text-blue-600 text-sm font-bold bg-blue-50 px-4 py-2 rounded-xl hover:bg-blue-100 transition">View All</Link>
-                    </div>
-
-                    {transactions.length === 0 ? (
-                        <div className="text-center py-12 text-slate-400">
-                             <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300">
-                                <RefreshCw size={24} />
+                            <h3 className="text-lg md:text-xl font-bold text-slate-800 mb-1">What would you like to do?</h3>
+                            <p className="text-xs md:text-sm text-slate-500 mb-4">Choose from our popular actions below</p>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+                                <BigActionButton icon={FileText} label="Account Info" color="bg-slate-500" onClick={() => {}} />
+                                <BigActionButton icon={Send} label="Send Money" color="bg-blue-500" onClick={() => router.push('/dashboard/transfer')} />
+                                <BigActionButton icon={Download} label="Deposit" color="bg-green-500" onClick={() => router.push('/dashboard/deposit')} />
+                                <BigActionButton icon={ArrowRightLeft} label="History" color="bg-purple-500" onClick={() => router.push('/dashboard/transactions')} />
                             </div>
-                            <p>No transactions found.</p>
                         </div>
-                    ) : (
-                        <div className="space-y-4">
-                            {transactions.slice(0, 5).map(tx => (
-                                <div key={tx.id} className="flex justify-between items-center p-4 hover:bg-slate-50 rounded-2xl transition group border border-transparent hover:border-slate-100 cursor-default">
-                                    <div className="flex items-center gap-5">
-                                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-105 ${
-                                            tx.status === 'APPROVED' 
-                                                ? (tx.type === 'DEPOSIT' ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600')
-                                                : 'bg-red-100 text-red-600'
-                                        }`}>
-                                            {tx.type === 'DEPOSIT' ? <ArrowDownLeft size={22} /> : <ArrowUpRight size={22} />}
-                                        </div>
-                                        <div>
-                                            <p className="font-bold text-slate-900 text-sm group-hover:text-blue-600 transition-colors">
-                                                {tx.type === 'DEPOSIT' ? 'Crypto Deposit' : 'Transfer'}
-                                            </p>
-                                            <p className="text-xs text-slate-500 font-medium mt-0.5">{formatDate(tx.createdAt)}</p>
-                                        </div>
+                    </div>
+                    {/* STATS */}
+                    <div className="space-y-4 md:space-y-6">
+                        <StatWidget label="Transaction Limit" value="$500,000.00" icon={ShieldAlert} color="bg-indigo-500" progress={75} />
+                        <StatWidget label="Pending Inflow" value="$0.00" icon={Loader2} color="bg-yellow-500" />
+                        <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
+                            <div className="flex items-center justify-between mb-4"><h3 className="font-bold text-slate-900 text-sm flex items-center gap-2"><Repeat size={16} className="text-blue-500"/> Quick Exchange</h3></div>
+                            <div className="space-y-3">
+                                <div className="flex gap-2">
+                                    <select value={convertFrom} onChange={(e) => setConvertFrom(e.target.value)} className="w-1/2 bg-slate-50 border-slate-200 rounded-xl p-2 text-xs font-bold">{assets.length > 0 ? assets.map(a => <option key={a.symbol} value={a.symbol}>{a.symbol}</option>) : <option>USDT</option>}</select>
+                                    <select value={convertTo} onChange={(e) => setConvertTo(e.target.value)} className="w-1/2 bg-slate-50 border-slate-200 rounded-xl p-2 text-xs font-bold">{assets.length > 0 ? assets.map(a => <option key={a.symbol} value={a.symbol}>{a.symbol}</option>) : <option>BTC</option>}</select>
+                                </div>
+                                <div className="flex gap-2">
+                                    <input type="number" value={convertAmount} onChange={(e) => setConvertAmount(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-bold outline-none focus:ring-1 focus:ring-blue-500" placeholder="Amount" />
+                                    <button onClick={handleConvert} disabled={isConverting} className={`px-4 rounded-xl font-bold text-xs text-white transition whitespace-nowrap ${convertSuccess ? 'bg-green-500' : 'bg-slate-900 hover:bg-slate-800'}`}>
+                                        {isConverting ? <Loader2 className="animate-spin" size={14}/> : (convertSuccess ? <Check size={16}/> : 'Convert')}
+                                    </button>
+                                </div>
+                                {convertMsg && <p className="text-[10px] text-center text-slate-500">{convertMsg}</p>}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* ROW 3: MENU GRID */}
+                <div>
+                    <div className="flex items-center justify-between mb-3 md:mb-4">
+                        <h3 className="text-lg font-bold text-slate-800">Banking Menu</h3>
+                        <span className="text-xs text-slate-400 font-medium italic">Select an option to continue</span>
+                    </div>
+                    <div className="grid grid-cols-3 md:grid-cols-6 gap-3 md:gap-4">
+                        {kycStatus !== 'verified' ? (
+                            <MenuGridItem icon={ShieldAlert} label="Verify Account" color="bg-red-500" badge={true} onClick={() => router.push('/dashboard/kyc')} />
+                        ) : (
+                            <MenuGridItem icon={Home} label="Home" color="bg-blue-500" onClick={() => {}} />
+                        )}
+                        <MenuGridItem icon={ArrowRightLeft} label="Activity" color="bg-green-500" onClick={() => router.push('/dashboard/transactions')} />
+                        <MenuGridItem icon={CreditCard} label="Cards" color="bg-purple-500" onClick={() => router.push('/dashboard/cards')} />
+                        <MenuGridItem icon={Send} label="Transfer" color="bg-indigo-500" onClick={() => router.push('/dashboard/transfer')} />
+                        <MenuGridItem icon={Globe} label="Int'l Wire" color="bg-cyan-500" onClick={() => {}} />
+                        <MenuGridItem icon={Download} label="Deposit" color="bg-teal-500" onClick={() => router.push('/dashboard/deposit')} />
+                        <MenuGridItem icon={Landmark} label="Loan" color="bg-emerald-500" onClick={() => {}} />
+                        <MenuGridItem icon={FileText} label="IRS Refund" color="bg-orange-500" onClick={() => {}} />
+                        <MenuGridItem icon={Settings} label="Settings" color="bg-slate-600" onClick={() => router.push('/dashboard/settings')} />
+                        <MenuGridItem icon={HelpCircle} label="Support" color="bg-pink-500" onClick={() => {}} />
+                        <MenuGridItem icon={LogOut} label="Logout" color="bg-red-500" onClick={handleLogout} />
+                    </div>
+                </div>
+
+                {/* ROW 4: RECENT ACTIVITY */}
+                <div className="bg-white rounded-3xl p-5 md:p-8 shadow-sm border border-slate-100">
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="font-bold text-slate-900 flex items-center gap-2"><ArrowRightLeft size={20} className="text-blue-500"/> Recent Activity</h3>
+                        <Link href="/dashboard/transactions" className="text-xs font-bold text-blue-600 hover:bg-blue-50 px-3 py-1 rounded transition">View All</Link>
+                    </div>
+                    <div className="space-y-1">
+                        {transactions.slice(0, 5).map(tx => (
+                            <div key={tx.id} className="flex items-center justify-between p-3 md:p-4 hover:bg-slate-50 rounded-2xl transition group border-b border-slate-50 last:border-0 last:pb-0">
+                                <div className="flex items-center gap-4">
+                                    <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center text-white shadow-sm ${tx.type === 'DEPOSIT' ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-600'}`}>
+                                        {tx.type === 'DEPOSIT' ? <ArrowDownLeft size={18} /> : <ArrowUpRight size={18} />}
                                     </div>
-                                    <div className="text-right">
-                                        <p className={`font-bold text-sm mb-1 ${tx.type === 'DEPOSIT' ? 'text-green-600' : 'text-slate-900'}`}>
-                                            {tx.type === 'DEPOSIT' ? '+' : '-'}{formatCurrency(tx.amount)}
-                                        </p>
-                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase ${
-                                            tx.status === 'APPROVED' ? 'bg-green-50 text-green-700' : 
-                                            tx.status === 'PENDING' ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-700'
-                                        }`}>
-                                            {tx.status}
-                                        </span>
+                                    <div>
+                                        <p className="font-bold text-slate-900 text-sm capitalize">{tx.type.toLowerCase()} <span className="hidden sm:inline text-xs font-normal text-slate-400">({tx.method || 'General'})</span></p>
+                                        <p className="text-[10px] md:text-xs text-slate-400">{formatDate(tx.createdAt)}</p>
                                     </div>
                                 </div>
-                            ))}
-                        </div>
-                    )}
+                                <div className="text-right">
+                                    <p className={`font-bold text-sm md:text-base ${tx.type === 'DEPOSIT' ? 'text-green-600' : 'text-slate-900'}`}>
+                                        {tx.type === 'DEPOSIT' ? '+' : '-'}{formatCurrency(tx.amount)}
+                                    </p>
+                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${tx.status === 'APPROVED' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>{tx.status}</span>
+                                </div>
+                            </div>
+                        ))}
+                        {transactions.length === 0 && (
+                            <div className="text-center py-8"><p className="text-slate-400 text-xs">No recent transactions found.</p></div>
+                        )}
+                    </div>
                 </div>
 
             </div>
+            
+            {/* FOOTER */}
+            <div className="max-w-6xl mx-auto mt-12 mb-4 text-center"><p className="text-[10px] text-slate-400">© 2026 longinova Bank. Secured by SSL.</p></div>
         </div>
       </main>
     </div>

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   ArrowLeft, Search, CheckCircle, User, ArrowRight, 
-  Loader2, ShieldCheck, AlertCircle 
+  Loader2, ShieldCheck, AlertCircle, ChevronDown 
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -12,34 +12,84 @@ export default function TransferPage() {
   const router = useRouter();
   const [user, setUser] = useState(null);
 
-  // --- WIZARD STATE ---
-  const [step, setStep] = useState(1); // 1=Search, 2=Amount, 3=Confirm, 4=Success
-  
-  // --- FORM DATA ---
+  const [step, setStep] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
   const [recipient, setRecipient] = useState(null);
   const [amount, setAmount] = useState('');
+  const [asset, setAsset] = useState('USDT'); 
   const [pin, setPin] = useState('');
   
-  // --- UI FLAGS ---
+  const [assetBalances, setAssetBalances] = useState({
+    USDT: 0, BTC: 0, ETH: 0, SOL: 0, TRX: 0, BNB: 0
+  });
+
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
 
+  // 1. Load User & Fetch Transactions
   useEffect(() => {
-    const stored = localStorage.getItem('user');
-    if (stored) setUser(JSON.parse(stored));
-    else router.push('/login');
+    const init = async () => {
+        const stored = localStorage.getItem('user');
+        if (!stored) { router.push('/login'); return; }
+        
+        const currentUser = JSON.parse(stored);
+        setUser(currentUser);
+
+        try {
+            const res = await fetch('/api/transactions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: currentUser.email })
+            });
+            if (res.ok) {
+                const txs = await res.json();
+                calculateBalances(txs);
+            }
+        } catch (e) { console.error("Balance Sync Failed", e); }
+    };
+    init();
   }, [router]);
 
-  // STEP 1: FIND USER
+  // ✅ FIXED LOGIC: Now matches Dashboard exactly (Base = ETH)
+  const calculateBalances = (txs) => {
+    const balances = { 
+        USDT: 0, BTC: 0, ETH: 0, SOL: 0, TRX: 0, BNB: 0 
+    };
+
+    txs.forEach(tx => {
+        if (tx.status === 'APPROVED') {
+            const method = tx.method ? tx.method.toUpperCase() : '';
+            
+            // Default to USDT if generic
+            let key = 'USDT'; 
+
+            // ✅ Same Keyword Logic as Dashboard
+            if (method.includes('ETH') || method.includes('ERC20') || method.includes('BASE')) key = 'ETH';
+            else if (method.includes('BTC') || method.includes('BITCOIN')) key = 'BTC';
+            else if (method.includes('TRX') || method.includes('TRON')) key = 'TRX';
+            else if (method.includes('SOL')) key = 'SOL';
+            else if (method.includes('BNB') || method.includes('BSC')) key = 'BNB';
+            // else remains USDT
+
+            if (tx.type === 'DEPOSIT') {
+                balances[key] += tx.amount;
+            } else if (tx.type === 'TRANSFER' || tx.type === 'WITHDRAW') {
+                balances[key] -= tx.amount;
+            }
+        }
+    });
+
+    Object.keys(balances).forEach(k => { if(balances[k] < 0) balances[k] = 0; });
+    setAssetBalances(balances);
+  };
+
   const handleSearch = async (e) => {
     e.preventDefault();
     setIsSearching(true);
     setSearchError('');
     setRecipient(null);
-
     try {
         const res = await fetch('/api/transfer/search', {
             method: 'POST',
@@ -47,9 +97,7 @@ export default function TransferPage() {
             body: JSON.stringify({ query: searchQuery })
         });
         const data = await res.json();
-
         if (res.ok && data.found) {
-            // Prevent finding yourself
             if (data.recipient.email === user.email) {
                 setSearchError("You cannot send money to yourself.");
             } else {
@@ -65,11 +113,9 @@ export default function TransferPage() {
     }
   };
 
-  // STEP 3: EXECUTE TRANSFER
   const handleTransfer = async () => {
     setIsSubmitting(true);
     setSubmitError('');
-
     try {
         const res = await fetch('/api/transfer', {
             method: 'POST',
@@ -78,18 +124,21 @@ export default function TransferPage() {
                 senderEmail: user.email,
                 recipientId: recipient.id,
                 amount, 
+                asset, 
                 pin 
             })
         });
-
         const data = await res.json();
-
         if (res.ok) {
-            // Update local balance immediately for UX
             const updatedUser = { ...user, balance: user.balance - parseFloat(amount) };
             localStorage.setItem('user', JSON.stringify(updatedUser));
             setUser(updatedUser);
-            setStep(4); // Success
+            
+            setAssetBalances(prev => ({
+                ...prev,
+                [asset]: Math.max(0, prev[asset] - parseFloat(amount))
+            }));
+            setStep(4); 
         } else {
             setSubmitError(data.message);
         }
@@ -101,11 +150,21 @@ export default function TransferPage() {
   };
 
   if (!user) return null;
+  
+  // Calculate current available for selected asset
+  const currentAssetBalance = assetBalances[asset] || 0;
+
+  const ASSET_OPTIONS = [
+    { code: 'USDT', name: 'Tether (USDT)' },
+    { code: 'BTC', name: 'Bitcoin (BTC)' },
+    { code: 'ETH', name: 'Ethereum (ETH)' },
+    { code: 'SOL', name: 'Solana (SOL)' },
+    { code: 'TRX', name: 'Tron (TRX)' },
+    { code: 'BNB', name: 'BNB Smart Chain' }
+  ];
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-900">
-        
-        {/* HEADER */}
         <div className="px-6 py-4 bg-white border-b border-slate-200 flex items-center gap-4">
              <Link href="/dashboard" className="p-2 hover:bg-slate-100 rounded-full transition text-slate-500">
                 <ArrowLeft size={20} />
@@ -113,11 +172,9 @@ export default function TransferPage() {
              <h1 className="font-bold text-lg">Send Money</h1>
         </div>
 
-        {/* MAIN CONTENT AREA */}
         <div className="flex-1 flex items-center justify-center p-4">
             <div className="w-full max-w-md">
 
-                {/* --- STEP 1: SEARCH RECIPIENT --- */}
                 {step === 1 && (
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                         <div className="bg-white p-8 rounded-3xl shadow-xl border border-slate-100">
@@ -142,14 +199,11 @@ export default function TransferPage() {
                                     {isSearching ? <Loader2 className="animate-spin" size={18} /> : <ArrowRight size={18} />}
                                 </button>
                             </form>
-
                             {searchError && (
                                 <div className="p-3 bg-red-50 text-red-600 text-sm font-bold rounded-xl flex items-center gap-2 mb-4 animate-in shake">
                                     <AlertCircle size={16}/> {searchError}
                                 </div>
                             )}
-
-                            {/* RECIPIENT FOUND CARD */}
                             {recipient && (
                                 <div className="bg-green-50 border border-green-100 p-4 rounded-2xl flex items-center justify-between animate-in zoom-in duration-300">
                                     <div className="flex items-center gap-3">
@@ -170,7 +224,6 @@ export default function TransferPage() {
                     </div>
                 )}
 
-                {/* --- STEP 2: AMOUNT --- */}
                 {step === 2 && recipient && (
                     <div className="animate-in fade-in slide-in-from-right-8 duration-500">
                         <div className="bg-white p-8 rounded-3xl shadow-xl border border-slate-100 text-center">
@@ -181,8 +234,26 @@ export default function TransferPage() {
                                 <p className="text-slate-500 font-bold">Sending to {recipient.firstName}</p>
                             </div>
 
+                            <div className="mb-6 text-left">
+                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">Select Asset</label>
+                                <div className="relative">
+                                    <select 
+                                        value={asset} 
+                                        onChange={(e) => setAsset(e.target.value)}
+                                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 appearance-none outline-none focus:ring-2 focus:ring-blue-500"
+                                    >
+                                        {ASSET_OPTIONS.map(opt => (
+                                            <option key={opt.code} value={opt.code}>
+                                                {opt.name} — ${assetBalances[opt.code]?.toLocaleString() || '0'} Available
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <ChevronDown className="absolute right-4 top-3.5 text-slate-400 pointer-events-none" size={20} />
+                                </div>
+                            </div>
+
                             <div className="mb-8">
-                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Amount (USD)</label>
+                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Amount (USD Value)</label>
                                 <div className="relative flex justify-center items-center mt-2">
                                     <span className="text-4xl font-bold text-slate-300 mr-2">$</span>
                                     <input 
@@ -195,12 +266,14 @@ export default function TransferPage() {
                                         placeholder="0"
                                     />
                                 </div>
-                                <p className="text-xs text-slate-400 mt-2 font-bold">Balance: ${user.balance.toLocaleString()}</p>
+                                <p className="text-xs text-slate-400 mt-2 font-bold">
+                                    Available {asset}: <span className="text-slate-900">${currentAssetBalance.toLocaleString()}</span>
+                                </p>
                             </div>
 
                             <button 
                                 onClick={() => setStep(3)}
-                                disabled={!amount || parseFloat(amount) <= 0 || parseFloat(amount) > user.balance}
+                                disabled={!amount || parseFloat(amount) <= 0 || parseFloat(amount) > currentAssetBalance}
                                 className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-bold shadow-lg shadow-blue-200 transition disabled:opacity-50"
                             >
                                 Review Payment
@@ -210,27 +283,24 @@ export default function TransferPage() {
                     </div>
                 )}
 
-                {/* --- STEP 3: CONFIRMATION (PIN) --- */}
                 {step === 3 && (
                     <div className="animate-in fade-in slide-in-from-right-8 duration-500">
                         <div className="bg-white p-8 rounded-3xl shadow-xl border border-slate-100">
                             <h2 className="text-xl font-bold text-slate-900 mb-6 text-center">Confirm Transfer</h2>
-                            
                             <div className="bg-slate-50 p-4 rounded-xl mb-6 space-y-3">
                                 <div className="flex justify-between text-sm">
                                     <span className="text-slate-500">Recipient</span>
                                     <span className="font-bold text-slate-900">{recipient.firstName} {recipient.lastName}</span>
                                 </div>
                                 <div className="flex justify-between text-sm">
+                                    <span className="text-slate-500">Asset</span>
+                                    <span className="font-bold text-slate-900">{asset}</span>
+                                </div>
+                                <div className="flex justify-between text-sm">
                                     <span className="text-slate-500">Amount</span>
                                     <span className="font-bold text-slate-900 text-lg">${amount}</span>
                                 </div>
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-slate-500">Fee</span>
-                                    <span className="font-bold text-green-600">Free</span>
-                                </div>
                             </div>
-
                             <div className="mb-6">
                                 <label className="block text-center text-xs font-bold text-slate-400 uppercase mb-3">Enter Security PIN</label>
                                 <input 
@@ -242,11 +312,9 @@ export default function TransferPage() {
                                     placeholder="••••"
                                 />
                             </div>
-
                             {submitError && (
                                 <div className="text-center text-red-500 text-sm font-bold mb-4">{submitError}</div>
                             )}
-
                             <button 
                                 onClick={handleTransfer}
                                 disabled={isSubmitting || pin.length < 4}
@@ -259,15 +327,13 @@ export default function TransferPage() {
                     </div>
                 )}
 
-                {/* --- STEP 4: SUCCESS --- */}
                 {step === 4 && (
                     <div className="text-center animate-in zoom-in duration-500">
                         <div className="w-24 h-24 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl shadow-green-100">
                             <CheckCircle size={48} />
                         </div>
                         <h2 className="text-3xl font-bold text-slate-900 mb-2">Success!</h2>
-                        <p className="text-slate-500 mb-8">You successfully sent <strong>${amount}</strong> to <strong>{recipient.firstName}</strong>.</p>
-                        
+                        <p className="text-slate-500 mb-8">You sent <strong>${amount} ({asset})</strong> to <strong>{recipient.firstName}</strong>.</p>
                         <div className="space-y-3">
                             <button onClick={() => { setStep(1); setAmount(''); setPin(''); setRecipient(null); }} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-xl font-bold transition">
                                 Send Another
@@ -278,7 +344,6 @@ export default function TransferPage() {
                         </div>
                     </div>
                 )}
-
             </div>
         </div>
     </div>

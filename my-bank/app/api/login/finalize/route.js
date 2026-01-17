@@ -4,43 +4,53 @@ import bcrypt from 'bcryptjs';
 
 export async function POST(req) {
   try {
-    const { email, pin, otp } = await req.json();
-    const currentDevice = req.headers.get('user-agent') || 'Unknown Device';
+    const body = await req.json();
+    const { email, pin } = body;
 
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) return NextResponse.json({ message: 'User not found' }, { status: 404 });
+    console.log("Login Finalize Attempt:", { email, pinProvided: !!pin });
 
-    // 1. Verify New Device OTP (if provided/required)
-    if (otp) {
-        if (user.loginOTP !== otp || new Date() > user.loginOTPExpires) {
-            return NextResponse.json({ message: 'Invalid or expired device code' }, { status: 400 });
-        }
+    // 1. Validate Input
+    if (!email || !pin) {
+      return NextResponse.json({ message: 'Email and PIN are required' }, { status: 400 });
     }
 
-    // 2. Verify PIN
-    const isPinValid = await bcrypt.compare(pin, user.pin);
-    if (!isPinValid) {
-        return NextResponse.json({ message: 'Invalid PIN' }, { status: 400 });
-    }
-
-    // 3. Success! Update Trusted Device & Clear OTP
-    await prisma.user.update({
-        where: { email },
-        data: { 
-            lastDevice: currentDevice, // Trust this device now
-            loginOTP: null,
-            loginOTPExpires: null
-        }
+    // 2. Find User
+    const user = await prisma.user.findUnique({
+      where: { email },
     });
 
-    const { password: _, pin: __, ...userWithoutSecrets } = user;
+    if (!user) {
+      console.log("User not found during PIN check");
+      return NextResponse.json({ message: 'User not found' }, { status: 404 });
+    }
 
-    return NextResponse.json({ 
-      success: true, 
-      user: userWithoutSecrets 
-    }, { status: 200 });
+    // 3. Verify PIN (using bcrypt)
+    // We check if user.pin exists to prevent crashes on old accounts
+    if (!user.pin) {
+        return NextResponse.json({ message: 'Account has no PIN set' }, { status: 400 });
+    }
+
+    const isMatch = await bcrypt.compare(pin, user.pin);
+
+    if (isMatch) {
+      // Login Success!
+      // You might want to set a session cookie here if using JWT
+      return NextResponse.json({ 
+          message: 'Login successful', 
+          user: { 
+              firstName: user.firstName, 
+              lastName: user.lastName, 
+              email: user.email,
+              balance: user.balance,
+              accountNumber: user.accountNumber 
+          } 
+      }, { status: 200 });
+    } else {
+      return NextResponse.json({ message: 'Invalid PIN' }, { status: 401 });
+    }
 
   } catch (error) {
-    return NextResponse.json({ message: 'Internal Error' }, { status: 500 });
+    console.error("PIN Verification Error:", error); // <--- This will show the real error in your terminal
+    return NextResponse.json({ message: 'Internal Server Error', error: error.message }, { status: 500 });
   }
 }

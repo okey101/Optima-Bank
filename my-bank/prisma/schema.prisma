@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite" // Or "postgresql" if you are using Vercel/Neon
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -18,33 +18,38 @@ model User {
   password      String
   pin           String
 
-  // ✅ NEW: Unique 10-digit Account Number
-  // We use "PENDING" as a temporary default for old users until you update them
+  // ✅ ACCOUNT ID (New System)
   accountNumber String    @unique @default("PENDING")
 
   balance       Float     @default(0.0)
   
-  // --- WALLET KEYS (For Crypto Features) ---
-  walletIndex   Int       @default(0) // Used to derive keys
-  ethAddress    String?   // Ethereum / BNB / Base / Polygon
-  btcAddress    String?   // Bitcoin
-  solAddress    String?   // Solana
-  trxAddress    String?   // Tron
+  // --- WALLET KEYS ---
+  walletIndex   Int       @default(0)
+  ethAddress    String?
+  btcAddress    String?
+  solAddress    String?
+  trxAddress    String?
 
   // --- KYC / VERIFICATION ---
-  kycStatus     String    @default("UNVERIFIED") // UNVERIFIED, PENDING, VERIFIED, REJECTED
+  kycStatus     String    @default("UNVERIFIED")
   
-  // Personal Details
+  // --- CONTACT & LOCATION (Restored Fields) ---
+  phone         String?   // ✅ Added back to prevent error
   dateOfBirth   String?
   streetAddress String?
   city          String?
+  state         String?   // ✅ Added back
+  zipCode       String?   // ✅ Added back
   country       String?
   
-  // ID Documents
+  // --- SECURITY ---
+  isEmailVerified Boolean @default(false) // ✅ Added back
+  lastDevice      String?                 // ✅ Added back
+  verificationCode String?
+
+  // --- ID DOCUMENTS ---
   idType        String?
   idNumber      String?
-  
-  // Image Links (Uploaded URLs)
   kycFront      String?
   kycBack       String?
   kycSelfie     String?
@@ -60,7 +65,7 @@ model Transaction {
   amount    Float
   type      String   // DEPOSIT, WITHDRAW, TRANSFER
   status    String   // PENDING, APPROVED, REJECTED, FAILED
-  method    String?  // e.g. "BITCOIN", "SENT TO JOHN", "BANK TRANSFER"
+  method    String?  
   
   userId    String
   user      User     @relation(fields: [userId], references: [id])

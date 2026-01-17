@@ -7,13 +7,12 @@ export async function POST(req) {
 
     if (!query) return NextResponse.json({ message: 'Query required' }, { status: 400 });
 
-    // SEARCH LOGIC: Find by Email OR Account Number (UID)
+    // ✅ SEARCH LOGIC: Find by Email OR Account Number (UID)
     const recipient = await prisma.user.findFirst({
         where: {
             OR: [
                 { email: query },           // Match Email
-                // If you have an accountNumber field in DB, uncomment below:
-                // { accountNumber: query } 
+                { accountNumber: query }    // ✅ Match Account ID (Uncommented this)
             ]
         },
         select: {
@@ -21,7 +20,7 @@ export async function POST(req) {
             firstName: true,
             lastName: true,
             email: true,
-            // accountNumber: true
+            accountNumber: true         // ✅ Return the ID too (Uncommented this)
         }
     });
 
@@ -32,6 +31,7 @@ export async function POST(req) {
     return NextResponse.json({ found: true, recipient }, { status: 200 });
 
   } catch (error) {
+    console.error("Search API Error:", error);
     return NextResponse.json({ message: 'Error' }, { status: 500 });
   }
 }

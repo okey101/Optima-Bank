@@ -1,247 +1,218 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, Lock, Mail, ArrowRight, Zap, Globe, Smartphone, Loader2, AlertCircle } from 'lucide-react';
-import Link from 'next/link';
-import Image from 'next/image';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { 
+  Mail, Lock, ArrowRight, Loader2, AlertCircle, 
+  CheckCircle2, ShieldCheck, Globe, ChevronRight 
+} from 'lucide-react';
+import Image from 'next/image';
 
 export default function LoginPage() {
   const router = useRouter();
-  
-  // --- STATE ---
-  const [showSimulation, setShowSimulation] = useState(true);
-  const [loadingText, setLoadingText] = useState("Authenticating Secure Gateway...");
-  
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [error, setError] = useState("");
+  const [formData, setFormData] = useState({ email: '', password: '' });
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [activeFeature, setActiveFeature] = useState(0);
 
-  // --- 1. OPENING SIMULATION LOGIC ---
+  // Animation loop for the left sidebar features
   useEffect(() => {
-    const timer1 = setTimeout(() => setLoadingText("Verifying Encryption Keys..."), 800);
-    const timer2 = setTimeout(() => setLoadingText("Establishing Secure Connection..."), 1800);
-    const timer3 = setTimeout(() => setShowSimulation(false), 2600); 
-
-    return () => {
-        clearTimeout(timer1);
-        clearTimeout(timer2);
-        clearTimeout(timer3);
-    };
+    const interval = setInterval(() => {
+      setActiveFeature((prev) => (prev + 1) % 3);
+    }, 4000);
+    return () => clearInterval(interval);
   }, []);
 
-  // --- 2. REAL LOGIN HANDLER (Updated for PIN Flow) ---
-  const handleLogin = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsLoggingIn(true);
-    setError("");
+    setError('');
+    setLoading(true);
 
     try {
       const res = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify(formData),
       });
 
       const data = await res.json();
 
       if (res.ok) {
-        // ✅ UPDATE: Redirect to PIN page with query params
-        const query = `?email=${encodeURIComponent(data.email)}&newDevice=${data.isNewDevice}`;
-        router.push(`/login/pin${query}`);
+        // ✅ CRITICAL FIX: Save email BEFORE navigating
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('loginEmail', formData.email);
+        }
+        
+        // Small delay to allow the animation to feel "complete"
+        setTimeout(() => {
+            router.push('/login/pin');
+        }, 300);
+
       } else {
-        setError(data.message || 'Invalid email or password');
+        setError(data.message || 'Invalid credentials');
       }
     } catch (err) {
-      setError('Connection failed. Please try again.');
+      setError('Connection failed. Please check your internet.');
     } finally {
-      setIsLoggingIn(false);
+      setLoading(false);
     }
   };
 
-  // --- RENDER: LOADING SIMULATION SCREEN ---
-  if (showSimulation) {
-    return (
-        <div className="fixed inset-0 bg-white z-50 flex flex-col items-center justify-center font-sans">
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-white"></div>
-            <div className="relative z-10 flex flex-col items-center">
-                <div className="relative w-48 h-16 mb-8">
-                    <Image src="/logo.png" alt="Finora Logo" fill className="object-contain" priority />
-                </div>
-                <div className="relative w-24 h-24 flex items-center justify-center mb-8">
-                    <div className="absolute inset-0 bg-blue-500 rounded-full opacity-20 animate-ping"></div>
-                    <div className="absolute inset-2 bg-blue-500 rounded-full opacity-30 animate-pulse"></div>
-                    <div className="relative bg-white p-4 rounded-full shadow-xl">
-                        <ShieldCheck className="text-blue-600" size={40} />
+  const features = [
+    {
+        title: "Global Banking",
+        desc: "Access your funds from anywhere in the world with zero latency.",
+        icon: Globe
+    },
+    {
+        title: "Bank-Grade Security",
+        desc: "Your data is protected by military-grade encryption and 2FA.",
+        icon: ShieldCheck
+    },
+    {
+        title: "Instant Transfers",
+        desc: "Send money to friends and family instantly with zero fees.",
+        icon: CheckCircle2
+    }
+  ];
+
+  return (
+    <div className="min-h-screen flex bg-white font-sans overflow-hidden">
+      
+      {/* LEFT SIDE: ANIMATED SIDEBAR (Hidden on mobile) */}
+      <div className="hidden lg:flex w-1/2 bg-slate-900 relative flex-col justify-between p-12 text-white overflow-hidden">
+        
+        {/* Animated Background Elements */}
+        <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
+             <div className="absolute top-[-20%] left-[-20%] w-[500px] h-[500px] bg-blue-500 rounded-full blur-[120px] animate-pulse"></div>
+             <div className="absolute bottom-[-10%] right-[-10%] w-[400px] h-[400px] bg-indigo-500 rounded-full blur-[100px] animate-pulse delay-700"></div>
+        </div>
+
+        {/* ✅ LOGO SECTION (Updated) */}
+        <div className="relative z-10 flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-700">
+             <div className="relative w-10 h-10">
+                <Image 
+                    src="/logo.png" 
+                    alt="Logo" 
+                    fill 
+                    className="object-contain" 
+                    priority
+                />
+             </div>
+             <span className="text-2xl font-bold tracking-tight">Optima Bank</span>
+        </div>
+
+        {/* Feature Carousel */}
+        <div className="relative z-10 max-w-md">
+            <div className="relative h-48">
+                {features.map((feat, index) => (
+                    <div 
+                        key={index}
+                        className={`absolute top-0 left-0 transition-all duration-700 ease-in-out transform ${
+                            index === activeFeature 
+                                ? 'opacity-100 translate-x-0 translate-y-0' 
+                                : 'opacity-0 translate-y-8 translate-x-4'
+                        }`}
+                    >
+                        <div className="w-14 h-14 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center mb-6 text-blue-400 border border-white/5">
+                            <feat.icon size={28} />
+                        </div>
+                        <h2 className="text-4xl font-bold mb-4 leading-tight">{feat.title}</h2>
+                        <p className="text-slate-400 text-lg leading-relaxed">{feat.desc}</p>
                     </div>
-                </div>
-                <h2 className="text-xl font-bold text-slate-800 mb-2">Finora Secure Gateway</h2>
-                <p className="text-blue-600 font-medium animate-pulse">{loadingText}</p>
+                ))}
+            </div>
+
+            {/* Carousel Indicators */}
+            <div className="flex gap-2 mt-8">
+                {features.map((_, i) => (
+                    <button 
+                        key={i} 
+                        onClick={() => setActiveFeature(i)}
+                        className={`h-1.5 rounded-full transition-all duration-500 ${activeFeature === i ? 'w-8 bg-blue-500' : 'w-2 bg-slate-700'}`}
+                    />
+                ))}
             </div>
         </div>
-    );
-  }
 
-  // --- RENDER: MAIN SPLIT SCREEN ---
-  return (
-    <div className="min-h-screen bg-white font-sans flex flex-col md:flex-row animate-fadeIn">
-      
-      {/* --- LEFT SIDE: MARKETING PANEL --- */}
-      <div className="md:w-5/12 bg-gradient-to-br from-blue-600 to-blue-800 relative hidden md:flex flex-col justify-between p-12 text-white overflow-hidden">
-         {/* Abstract Circles */}
-         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-white opacity-5 rounded-full blur-3xl"></div>
-         <div className="absolute bottom-0 right-0 w-80 h-80 bg-blue-400 opacity-10 rounded-full blur-3xl"></div>
-
-         {/* ✅ Logo with Link to Home */}
-         <Link href="/" className="relative z-10 w-40 h-12 block cursor-pointer hover:opacity-90 transition">
-            <Image src="/logo.png" alt="Finora Logo" fill className="object-contain object-left invert brightness-0 grayscale opacity-100" />
-         </Link>
-
-         {/* Center Content */}
-         <div className="relative z-10 mt-8">
-            <div className="bg-white/10 backdrop-blur-md inline-block px-4 py-1 rounded-full text-xs font-bold mb-6 border border-white/20">
-                Finora Banking
-            </div>
-            <h1 className="text-5xl font-bold mb-4 leading-tight">Welcome Back</h1>
-            <h2 className="text-2xl font-medium text-blue-100 mb-8">Finora</h2>
-            
-            <p className="text-blue-100 mb-10 leading-relaxed text-sm opacity-90 max-w-sm">
-                Swift and secure money transfers worldwide. Experience banking reimagined.
-            </p>
-
-            {/* Feature Grid */}
-            <div className="grid grid-cols-2 gap-4">
-                <div className="bg-white/10 p-4 rounded-xl border border-white/10 backdrop-blur-sm">
-                    <ShieldCheck className="mb-2 opacity-80" size={20} />
-                    <p className="font-bold text-sm">Bank-Grade Security</p>
-                    <p className="text-[10px] opacity-60">256-bit encryption</p>
-                </div>
-                <div className="bg-white/10 p-4 rounded-xl border border-white/10 backdrop-blur-sm">
-                    <Zap className="mb-2 opacity-80" size={20} />
-                    <p className="font-bold text-sm">Instant Transfers</p>
-                    <p className="text-[10px] opacity-60">Real-time processing</p>
-                </div>
-                <div className="bg-white/10 p-4 rounded-xl border border-white/10 backdrop-blur-sm">
-                    <Globe className="mb-2 opacity-80" size={20} />
-                    <p className="font-bold text-sm">Global Reach</p>
-                    <p className="text-[10px] opacity-60">200+ countries</p>
-                </div>
-                <div className="bg-white/10 p-4 rounded-xl border border-white/10 backdrop-blur-sm">
-                    <Smartphone className="mb-2 opacity-80" size={20} />
-                    <p className="font-bold text-sm">Mobile First</p>
-                    <p className="text-[10px] opacity-60">iOS & Android</p>
-                </div>
-            </div>
-         </div>
-
-         {/* Footer */}
-         <div className="relative z-10 text-xs text-blue-200 opacity-60 mt-auto">
-            <p>© 2026 Finora Bank. All rights reserved.</p>
-         </div>
+        {/* Footer */}
+        <div className="relative z-10 text-xs text-slate-500 font-medium">
+            © 2026 Optima Banking Group. All rights reserved.
+        </div>
       </div>
 
-      {/* --- RIGHT SIDE: LOGIN FORM --- */}
-      <div className="md:w-7/12 w-full bg-slate-50 flex flex-col items-center justify-center py-12 px-6 md:px-20 overflow-y-auto">
-        
-        {/* ✅ Mobile Logo with Link to Home */}
-        <div className="md:hidden w-full flex justify-center mb-8">
-            <Link href="/" className="relative w-40 h-10 block cursor-pointer hover:opacity-80 transition">
-                <Image src="/logo.png" alt="Finora Logo" fill className="object-contain" priority />
-            </Link>
-        </div>
-
-        <div className="max-w-md w-full bg-white p-10 rounded-3xl shadow-xl border border-slate-100">
+      {/* RIGHT SIDE: LOGIN FORM */}
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 lg:p-12 bg-slate-50 lg:bg-white relative">
+        <div className="w-full max-w-md space-y-8 animate-in fade-in slide-in-from-right-8 duration-700">
             
-            <div className="mb-8">
-                <h2 className="text-3xl font-bold text-slate-900 mb-2">Sign In</h2>
-                <p className="text-slate-500 text-sm">Access your Finora account</p>
+            <div className="text-center lg:text-left">
+                <h1 className="text-3xl font-bold text-slate-900 tracking-tight mb-2">Welcome Back</h1>
+                <p className="text-slate-500">Please enter your details to sign in.</p>
             </div>
 
-            {/* Error Message UI */}
             {error && (
-                <div className="mb-6 p-4 bg-red-50 border border-red-100 text-red-600 text-sm rounded-lg flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
-                    <AlertCircle size={16} /> {error}
+                <div className="p-4 bg-red-50 text-red-600 text-sm font-bold rounded-2xl flex items-center gap-3 border border-red-100 animate-in shake">
+                    <AlertCircle size={20} className="shrink-0" /> {error}
                 </div>
             )}
 
-            <form onSubmit={handleLogin} className="space-y-6">
-                
-                {/* Email Input */}
-                <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5 ml-1">Email Address or Username</label>
+            <form onSubmit={handleSubmit} className="space-y-5">
+                <div className="group">
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2 group-focus-within:text-blue-600 transition-colors">Email Address</label>
                     <div className="relative">
-                        <Mail className="absolute left-4 top-3.5 text-slate-400" size={18} />
+                        <Mail className="absolute left-4 top-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={20} />
                         <input 
-                            type="text" 
+                            type="email" 
                             required
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            className="w-full pl-11 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition font-medium" 
-                            placeholder="Enter your email address" 
+                            className="w-full p-4 pl-12 bg-slate-50 border border-slate-200 rounded-2xl font-medium focus:ring-4 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all placeholder:text-slate-300"
+                            placeholder="name@example.com"
+                            value={formData.email}
+                            onChange={(e) => setFormData({...formData, email: e.target.value})}
                         />
                     </div>
                 </div>
 
-                {/* Password Input */}
-                <div>
-                    <div className="flex justify-between items-center mb-1.5 ml-1">
-                        <label className="block text-xs font-bold text-slate-700">Password</label>
-                        <a href="#" className="text-xs font-bold text-blue-600 hover:text-blue-700">Forgot Password?</a>
+                <div className="group">
+                    <div className="flex justify-between items-center mb-2">
+                        <label className="block text-xs font-bold text-slate-500 uppercase group-focus-within:text-blue-600 transition-colors">Password</label>
+                        <Link href="/forgot-password" className="text-xs font-bold text-blue-600 hover:text-blue-700">Forgot Password?</Link>
                     </div>
                     <div className="relative">
-                        <Lock className="absolute left-4 top-3.5 text-slate-400" size={18} />
+                        <Lock className="absolute left-4 top-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={20} />
                         <input 
                             type="password" 
                             required
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            className="w-full pl-11 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition font-medium" 
-                            placeholder="Enter your password" 
+                            className="w-full p-4 pl-12 bg-slate-50 border border-slate-200 rounded-2xl font-medium focus:ring-4 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all placeholder:text-slate-300"
+                            placeholder="••••••••"
+                            value={formData.password}
+                            onChange={(e) => setFormData({...formData, password: e.target.value})}
                         />
                     </div>
                 </div>
 
-                {/* Keep me signed in */}
-                <div className="flex items-center">
-                    <input type="checkbox" id="keep-signed-in" className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer" />
-                    <label htmlFor="keep-signed-in" className="ml-2 text-sm text-slate-600 cursor-pointer">Keep me signed in</label>
-                </div>
-
-                {/* Sign In Button */}
                 <button 
                     type="submit" 
-                    disabled={isLoggingIn}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-xl font-bold text-sm shadow-lg shadow-blue-600/20 transition transform active:scale-[0.98] flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                    disabled={loading}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-bold text-lg transition-all shadow-xl shadow-blue-200 hover:shadow-blue-600/30 hover:-translate-y-1 flex items-center justify-center gap-2 disabled:opacity-50 disabled:translate-y-0 disabled:shadow-none"
                 >
-                    {isLoggingIn ? <Loader2 className="animate-spin" size={20} /> : "Sign In to Account"}
+                    {loading ? <Loader2 className="animate-spin" /> : <>Sign In <ArrowRight size={20} /></>}
                 </button>
-
             </form>
 
-            {/* Divider */}
-            <div className="relative my-8">
-                <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-slate-200"></div>
-                </div>
-                <div className="relative flex justify-center">
-                    <span className="bg-white px-4 text-xs text-slate-400 uppercase tracking-wide font-semibold">New to Finora?</span>
-                </div>
+            <div className="pt-6 border-t border-slate-100 text-center">
+                <p className="text-sm font-medium text-slate-500">
+                    Don't have an account yet?{' '}
+                    <Link href="/signup" className="text-blue-600 hover:text-blue-700 font-bold inline-flex items-center gap-1 group">
+                        Create Account 
+                        <ChevronRight size={16} className="group-hover:translate-x-1 transition-transform" />
+                    </Link>
+                </p>
             </div>
-
-            {/* Create Account Button */}
-            <Link 
-                href="/signup" 
-                className="w-full block text-center py-3.5 rounded-xl border-2 border-slate-200 text-slate-700 font-bold text-sm hover:border-slate-300 hover:bg-slate-50 transition"
-            >
-                Create New Account
-            </Link>
-
-            {/* Bottom Links */}
-            <div className="mt-8 pt-6 border-t border-slate-50 flex justify-center gap-6 text-xs text-slate-400 font-medium">
-                <span className="flex items-center gap-1 hover:text-slate-600 cursor-pointer"><ShieldCheck size={12}/> Security</span>
-                <Link href="/privacy" className="hover:text-slate-600 cursor-pointer">Privacy Policy</Link>
-                <Link href="/terms" className="hover:text-slate-600 cursor-pointer">Terms</Link>
+            
+            {/* Mobile Footer */}
+            <div className="lg:hidden text-center text-xs text-slate-400 mt-8">
+                Protected by reCAPTCHA and subject to the Privacy Policy.
             </div>
 
         </div>
