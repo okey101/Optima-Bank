@@ -84,7 +84,7 @@ export default function DashboardPage() {
   const [portfolioValue, setPortfolioValue] = useState(0);
   const [transactions, setTransactions] = useState([]);
   const [assets, setAssets] = useState([]);
-  const [kycStatus, setKycStatus] = useState('pending');
+  const [kycStatus, setKycStatus] = useState('PENDING'); // Default to pending to be safe
   
   // Notification State
   const [showNotifications, setShowNotifications] = useState(false);
@@ -121,16 +121,19 @@ export default function DashboardPage() {
       if (!stored) { router.push('/login'); return; }
       const currentUser = JSON.parse(stored);
       setUser(currentUser);
-      setKycStatus(currentUser.kycStatus || 'pending'); 
+      
+      // Init status from local storage, but fetch fresh immediately
+      setKycStatus(currentUser.kycStatus || 'UNVERIFIED'); 
 
       try {
-        const res = await fetch('/api/transactions', {
+        // 1. Fetch Transactions
+        const resTx = await fetch('/api/transactions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email: currentUser.email })
         });
-        if (res.ok) {
-            const txs = await res.json();
+        if (resTx.ok) {
+            const txs = await resTx.json();
             setTransactions(txs);
             const total = txs.reduce((acc, tx) => {
                 if (tx.status !== 'APPROVED') return acc;
@@ -140,6 +143,24 @@ export default function DashboardPage() {
             setPortfolioValue(total > 0 ? total : 0);
             setAssets([{symbol:'USDT', usdVal: total}, {symbol:'BTC', usdVal: 0}]); 
         }
+
+        // 2. Fetch Fresh User Status (Fix for Stale KYC)
+        const resStatus = await fetch('/api/user/refresh', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: currentUser.email })
+        });
+        
+        if (resStatus.ok) {
+            const data = await resStatus.json();
+            const freshUser = data.user;
+            // Update State
+            setKycStatus(freshUser.kycStatus || 'UNVERIFIED');
+            // Update Local Storage
+            const mergedUser = { ...currentUser, ...freshUser };
+            localStorage.setItem('user', JSON.stringify(mergedUser));
+        }
+
       } catch (e) { console.error("Sync Error", e); } 
       finally { setLoading(false); }
   };
@@ -177,7 +198,6 @@ export default function DashboardPage() {
   if (loading || !user) return <div className="min-h-screen bg-slate-50 flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" size={40}/></div>;
 
   return (
-    // ✅ 1. OUTER CONTAINER: h-screen + overflow-hidden (Locks Window Scroll)
     <div className="h-screen w-full bg-slate-50 font-sans flex text-slate-900 overflow-hidden">
       
       {/* CUSTOM SCROLLBAR STYLES */}
@@ -191,16 +211,16 @@ export default function DashboardPage() {
       {/* MOBILE SIDEBAR OVERLAY */}
       {sidebarOpen && <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm transition-opacity" onClick={() => setSidebarOpen(false)} />}
       
-      {/* ✅ 2. SIDEBAR: h-full, Flex Column, Independent Scroll */}
+      {/* SIDEBAR */}
       <aside className={`fixed inset-y-0 left-0 z-50 w-72 bg-white border-r border-slate-200 transform transition-transform duration-300 lg:static lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} flex flex-col h-full shrink-0`}>
         
-        {/* LOGO (Fixed) */}
-        <div className="h-20 flex items-center justify-between px-6 border-b border-slate-100 shrink-0">
-             <div className="relative w-32 h-10"><Image src="/logo.png" alt="Logo" fill className="object-contain" priority /></div>
-             <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-slate-400"><X size={24}/></button>
+        {/* ✅ ENLARGED LOGO HEADER */}
+        <div className="h-40 flex items-center justify-center px-4 border-b border-slate-100 shrink-0 bg-slate-50/30">
+             <div className="relative w-full h-32"><Image src="/logo.png" alt="Logo" fill className="object-contain" priority /></div>
+             <button onClick={() => setSidebarOpen(false)} className="lg:hidden absolute top-4 right-4 text-slate-400"><X size={24}/></button>
         </div>
         
-        {/* USER PROFILE (Fixed) */}
+        {/* USER PROFILE */}
         <div className="p-6 border-b border-slate-100 shrink-0">
             <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold text-lg">
@@ -211,14 +231,16 @@ export default function DashboardPage() {
                     <p className="text-xs text-slate-400 truncate">{user.email}</p>
                 </div>
             </div>
-            {kycStatus !== 'verified' && (
+            {/* ✅ FIXED: Uppercase 'VERIFIED' check */}
+            {kycStatus !== 'VERIFIED' && (
                 <Link href="/dashboard/kyc" className="mt-4 flex items-center justify-center gap-2 w-full bg-red-50 text-red-600 border border-red-100 py-2.5 rounded-xl text-xs font-bold hover:bg-red-100 transition">
-                    <ShieldAlert size={14} /> Verify Identity
+                    <ShieldAlert size={14} /> 
+                    {kycStatus === 'PENDING' ? 'Verification Pending' : 'Verify Identity'}
                 </Link>
             )}
         </div>
 
-        {/* NAV LINKS (Scrollable Area) */}
+        {/* NAV LINKS */}
         <nav className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
             <div>
                 <p className="px-4 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Main Menu</p>
@@ -250,7 +272,7 @@ export default function DashboardPage() {
             </div>
         </nav>
 
-        {/* FOOTER (Fixed) */}
+        {/* FOOTER */}
         <div className="p-4 border-t border-slate-100 shrink-0">
             <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 rounded-xl font-medium transition">
                 <LogOut size={18} /> <span className="text-sm">Log Out</span>
@@ -258,10 +280,10 @@ export default function DashboardPage() {
         </div>
       </aside>
 
-      {/* ✅ 3. MAIN CONTENT: h-full, Independent Scroll */}
+      {/* MAIN CONTENT */}
       <main className="flex-1 flex flex-col h-full w-full relative overflow-hidden">
         
-        {/* HEADER (Fixed) */}
+        {/* HEADER */}
         <header className="h-16 md:h-20 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-8 shrink-0 z-30">
             <div className="flex items-center gap-3">
                 <button onClick={() => setSidebarOpen(true)} className="lg:hidden p-2 -ml-2 text-slate-600 hover:bg-slate-100 rounded-full transition"><Menu size={24} /></button>
@@ -330,7 +352,7 @@ export default function DashboardPage() {
             </div>
         </header>
 
-        {/* ✅ 4. SCROLLABLE DASHBOARD CONTENT */}
+        {/* SCROLLABLE DASHBOARD CONTENT */}
         <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-slate-50/50 custom-scrollbar">
             <div className="max-w-6xl mx-auto space-y-6 md:space-y-8">
 
@@ -398,7 +420,8 @@ export default function DashboardPage() {
                         <span className="text-xs text-slate-400 font-medium italic">Select an option to continue</span>
                     </div>
                     <div className="grid grid-cols-3 md:grid-cols-6 gap-3 md:gap-4">
-                        {kycStatus !== 'verified' ? (
+                        {/* ✅ FIXED: Uppercase 'VERIFIED' check */}
+                        {kycStatus !== 'VERIFIED' ? (
                             <MenuGridItem icon={ShieldAlert} label="Verify Account" color="bg-red-500" badge={true} onClick={() => router.push('/dashboard/kyc')} />
                         ) : (
                             <MenuGridItem icon={Home} label="Home" color="bg-blue-500" onClick={() => {}} />

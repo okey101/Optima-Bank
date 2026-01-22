@@ -72,3 +72,19 @@ model Transaction {
 
   createdAt DateTime @default(now())
 }
+// Add this to the bottom of prisma/schema.prisma
+
+model Card {
+  id            String   @id @default(cuid())
+  cardNumber    String   @unique // In real banking, this is encrypted
+  cvv           String
+  expiryDate    String
+  type          String   // VIRTUAL, PHYSICAL, METAL
+  status        String   @default("ACTIVE") // ACTIVE, FROZEN
+  spendingLimit Float    @default(5000.0)
+  
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+
+  createdAt     DateTime @default(now())
+}
