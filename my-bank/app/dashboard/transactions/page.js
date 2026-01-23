@@ -1,225 +1,291 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
-  ShieldCheck, Menu, Home, ArrowRightLeft, CreditCard, PieChart, 
-  Settings, LogOut, Bell, Search, Loader2, RefreshCw, Wallet, 
-  CheckCircle, XCircle, Clock, Filter, Download
+  Home, ArrowRightLeft, CreditCard, Settings, LogOut, Bell, 
+  ArrowUpRight, ArrowDownLeft, Loader2, Menu, X, 
+  FileText, HelpCircle, Landmark, ShieldAlert, Gift, TrendingUp, 
+  Globe, Download, Send, Search, Filter, ChevronDown, CheckCircle, AlertCircle, ShieldCheck
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 
+// --- UTILS ---
+const formatCurrency = (val) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val || 0);
+const formatDate = (d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+// --- SHARED COMPONENTS (Matches Dashboard) ---
+const SidebarLink = ({ icon: Icon, label, href, active }) => (
+  <Link href={href} className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all duration-200 ${active ? 'bg-blue-50 text-blue-600 font-bold' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
+    <Icon size={18} />
+    <span className="text-sm">{label}</span>
+  </Link>
+);
+
 export default function TransactionsPage() {
   const router = useRouter();
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  
+  // --- STATE ---
   const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [kycStatus, setKycStatus] = useState('PENDING'); 
+  
+  // Transaction Data State
   const [transactions, setTransactions] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [filteredTx, setFilteredTx] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterType, setFilterType] = useState('ALL'); // ALL, DEPOSIT, WITHDRAW, TRANSFER
 
-  // --- FETCH DATA ---
+  // --- DATA FETCHING ---
   useEffect(() => {
-    const fetchData = async () => {
-        const storedUser = localStorage.getItem('user');
-        if (!storedUser) {
-            router.push('/login');
-            return;
-        }
-
-        const parsedUser = JSON.parse(storedUser);
-        setUser(parsedUser);
+    const init = async () => {
+        const stored = localStorage.getItem('user');
+        if (!stored) { router.push('/login'); return; }
+        const currentUser = JSON.parse(stored);
+        setUser(currentUser);
+        setKycStatus(currentUser.kycStatus || 'UNVERIFIED');
 
         try {
-            // Fetch up to 100 transactions for the full view
             const res = await fetch('/api/transactions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: parsedUser.email, limit: 100 })
+                body: JSON.stringify({ email: currentUser.email })
             });
-            
             if (res.ok) {
-                const txData = await res.json();
-                setTransactions(txData);
+                const data = await res.json();
+                setTransactions(data);
+                setFilteredTx(data);
             }
-        } catch (error) {
-            console.error("Failed to load transactions");
-        } finally {
-            setIsLoading(false);
-        }
+        } catch (e) { console.error("Error fetching txs", e); } 
+        finally { setLoading(false); }
     };
-
-    fetchData();
+    init();
   }, [router]);
 
-  // --- FORMATTERS ---
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount || 0);
-  };
+  // --- FILTER LOGIC ---
+  useEffect(() => {
+    let result = transactions;
 
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-        month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit'
-    });
-  };
+    // 1. Filter by Type
+    if (filterType !== 'ALL') {
+        result = result.filter(tx => tx.type === filterType);
+    }
 
-  const handleLogout = () => {
-    localStorage.removeItem('user');
-    router.push('/login');
-  };
+    // 2. Search (Method or Amount)
+    if (searchQuery) {
+        const lowerQ = searchQuery.toLowerCase();
+        result = result.filter(tx => 
+            (tx.method && tx.method.toLowerCase().includes(lowerQ)) ||
+            tx.amount.toString().includes(lowerQ)
+        );
+    }
 
-  if (!user) return null;
+    setFilteredTx(result);
+  }, [searchQuery, filterType, transactions]);
+
+  const handleLogout = () => { localStorage.removeItem('user'); router.push('/login'); };
+
+  if (loading || !user) return <div className="min-h-screen bg-slate-50 flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" size={40}/></div>;
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans flex">
+    <div className="h-screen w-full bg-slate-50 font-sans flex text-slate-900 overflow-hidden">
       
-      {/* --- MOBILE SIDEBAR OVERLAY --- */}
-      {isSidebarOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 z-40 lg:hidden backdrop-blur-sm" onClick={() => setIsSidebarOpen(false)}></div>
-      )}
-
-      {/* --- SIDEBAR --- */}
-      <aside className={`
-        fixed top-0 left-0 z-50 h-screen w-72 bg-white border-r border-slate-200 transition-transform duration-300 ease-in-out
-        lg:translate-x-0 lg:static lg:block
-        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-      `}>
-        <div className="h-24 flex items-center px-8 border-b border-slate-100">
-            <div className="relative w-40 h-12">
-                <Image src="/logo.png" alt="Finora Logo" fill className="object-contain object-left" priority />
+      {/* MOBILE SIDEBAR OVERLAY */}
+      {sidebarOpen && <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm transition-opacity" onClick={() => setSidebarOpen(false)} />}
+      
+      {/* --- SIDEBAR (EXACT COPY OF DASHBOARD) --- */}
+      <aside className={`fixed inset-y-0 left-0 z-50 w-72 bg-white border-r border-slate-200 transform transition-transform duration-300 lg:static lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} flex flex-col h-full shrink-0`}>
+        
+        {/* LOGO */}
+        <div className="h-40 flex items-center justify-center px-4 border-b border-slate-100 shrink-0 bg-slate-50/30">
+             <div className="relative w-full h-32"><Image src="/logo.png" alt="Logo" fill className="object-contain" priority /></div>
+             <button onClick={() => setSidebarOpen(false)} className="lg:hidden absolute top-4 right-4 text-slate-400"><X size={24}/></button>
+        </div>
+        
+        {/* USER PROFILE */}
+        <div className="p-6 border-b border-slate-100 shrink-0">
+            <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold text-lg">
+                    {user.firstName[0]}
+                </div>
+                <div className="overflow-hidden">
+                    <p className="text-sm font-bold text-slate-900 truncate">{user.firstName} {user.lastName}</p>
+                    <p className="text-xs text-slate-400 truncate">{user.email}</p>
+                </div>
             </div>
+            {kycStatus !== 'VERIFIED' && (
+                <Link href="/dashboard/kyc" className="mt-4 flex items-center justify-center gap-2 w-full bg-red-50 text-red-600 border border-red-100 py-2.5 rounded-xl text-xs font-bold hover:bg-red-100 transition">
+                    <ShieldAlert size={14} /> 
+                    {kycStatus === 'PENDING' ? 'Verification Pending' : 'Verify Identity'}
+                </Link>
+            )}
         </div>
 
-        <nav className="p-6 space-y-2">
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 px-3">Main Menu</p>
-            <Link href="/dashboard" className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 hover:text-blue-600 rounded-xl font-medium transition">
-                <Home size={20} /> Dashboard
-            </Link>
-            
-            {/* ACTIVE STATE */}
-            <Link href="/dashboard/transactions" className="flex items-center gap-3 px-4 py-3 bg-blue-50 text-blue-600 rounded-xl font-bold transition">
-                <ArrowRightLeft size={20} /> Transactions
-            </Link>
-            
-            <Link href="/dashboard/deposit" className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 hover:text-blue-600 rounded-xl font-medium transition">
-                <Wallet size={20} /> Deposit
-            </Link>
-            <Link href="/dashboard/cards" className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 hover:text-blue-600 rounded-xl font-medium transition">
-                <CreditCard size={20} /> My Cards
-            </Link>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mt-8 mb-4 px-3">Settings</p>
-            <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 rounded-xl font-medium transition">
-                <LogOut size={20} /> Logout
-            </button>
+        {/* NAV LINKS */}
+        <nav className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
+            <div>
+                <p className="px-4 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Main Menu</p>
+                <div className="space-y-1">
+                    <SidebarLink href="/dashboard" icon={Home} label="Dashboard" />
+                    {/* ACTIVE PAGE */}
+                    <SidebarLink href="/dashboard/transactions" icon={ArrowRightLeft} label="Transactions" active={true} />
+                    <SidebarLink href="/dashboard/cards" icon={CreditCard} label="My Cards" />
+                    <SidebarLink href="/dashboard/transfer" icon={Send} label="Transfer Money" />
+                    <SidebarLink href="/dashboard/deposit" icon={Download} label="Deposit Funds" />
+                </div>
+            </div>
+            <div>
+                <p className="px-4 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Services</p>
+                <div className="space-y-1">
+                    <SidebarLink href="/dashboard/transfer" icon={Globe} label="International Wire" />
+                    <SidebarLink href="/dashboard/loans" icon={Landmark} label="Loan Services" />
+                    <SidebarLink href="/dashboard/grants" icon={Gift} label="Grants & Aid" />
+                    <SidebarLink href="/dashboard/invest" icon={TrendingUp} label="Investments" />
+                    <SidebarLink href="/dashboard/tax" icon={FileText} label="IRS Tax Refund" />
+                </div>
+            </div>
+            <div>
+                <p className="px-4 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">System</p>
+                <div className="space-y-1">
+                    <SidebarLink href="/dashboard/kyc" icon={ShieldCheck} label="Verification Center" />
+                    <SidebarLink href="/dashboard/settings" icon={Settings} label="Settings" />
+                    <SidebarLink href="/dashboard/support" icon={HelpCircle} label="Help & Support" />
+                </div>
+            </div>
         </nav>
+
+        {/* FOOTER */}
+        <div className="p-4 border-t border-slate-100 shrink-0">
+            <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 rounded-xl font-medium transition">
+                <LogOut size={18} /> <span className="text-sm">Log Out</span>
+            </button>
+        </div>
       </aside>
 
       {/* --- MAIN CONTENT --- */}
-      <main className="flex-1 flex flex-col h-screen overflow-hidden">
+      <main className="flex-1 flex flex-col h-full w-full relative overflow-hidden">
         
         {/* HEADER */}
-        <header className="h-20 bg-white border-b border-slate-200 flex items-center justify-between px-6 lg:px-10 shrink-0">
-            <div className="flex items-center gap-4">
-                <button className="lg:hidden p-2 text-slate-600 hover:bg-slate-100 rounded-lg" onClick={() => setIsSidebarOpen(true)}>
-                    <Menu size={24} />
-                </button>
-                <h1 className="text-xl font-bold text-slate-800 hidden md:block">Transactions</h1>
+        <header className="h-16 md:h-20 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-8 shrink-0 z-30">
+            <div className="flex items-center gap-3">
+                <button onClick={() => setSidebarOpen(true)} className="lg:hidden p-2 -ml-2 text-slate-600 hover:bg-slate-100 rounded-full transition"><Menu size={24} /></button>
+                <h1 className="text-lg md:text-xl font-bold text-slate-900">Transaction History</h1>
             </div>
-            <div className="flex items-center gap-6">
-                <div className="flex items-center gap-3 pl-6 border-l border-slate-200">
-                    <div className="text-right hidden md:block">
-                        <p className="text-sm font-bold text-slate-800">{user.firstName} {user.lastName}</p>
-                    </div>
-                    <div className="w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-lg shadow-md uppercase">
-                        {user.firstName[0]}
-                    </div>
+            
+            <div className="flex items-center gap-4">
+                <button className="relative p-2 rounded-full bg-slate-50 text-slate-600 hover:bg-slate-100 transition">
+                    <Bell size={20} />
+                </button>
+                <div className="w-9 h-9 bg-slate-900 text-white rounded-full flex items-center justify-center font-bold text-sm shadow-lg ring-2 ring-white">
+                    {user.firstName[0]}
                 </div>
             </div>
         </header>
 
-        {/* CONTENT */}
-        <div className="flex-1 overflow-y-auto p-6 lg:p-10 scroll-smooth">
-            <div className="max-w-6xl mx-auto">
-                
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-                    <div>
-                        <h2 className="text-2xl font-bold text-slate-900">Transaction History</h2>
-                        <p className="text-slate-500 text-sm">View all your deposits and transfers</p>
+        {/* SCROLLABLE CONTENT */}
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-slate-50/50 custom-scrollbar">
+            <div className="max-w-5xl mx-auto space-y-6">
+
+                {/* FILTERS & SEARCH */}
+                <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
+                    <div className="relative w-full md:w-96">
+                        <Search className="absolute left-3 top-3 text-slate-400" size={18}/>
+                        <input 
+                            type="text" 
+                            placeholder="Search transactions..." 
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium outline-none focus:ring-2 focus:ring-blue-500 transition"
+                        />
                     </div>
-                    <div className="flex gap-2">
-                         <button className="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-50 transition">
-                            <Filter size={16} /> Filter
-                         </button>
-                         <button className="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-50 transition">
-                            <Download size={16} /> Export
-                         </button>
+                    <div className="flex gap-2 w-full md:w-auto">
+                        {['ALL', 'DEPOSIT', 'WITHDRAW', 'TRANSFER'].map(type => (
+                            <button 
+                                key={type}
+                                onClick={() => setFilterType(type)}
+                                className={`px-4 py-2 rounded-xl text-xs font-bold transition flex-1 md:flex-none ${filterType === type ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                            >
+                                {type}
+                            </button>
+                        ))}
                     </div>
                 </div>
 
-                <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
-                    {/* TABLE HEADER */}
-                    <div className="grid grid-cols-12 gap-4 p-4 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider">
-                        <div className="col-span-5 md:col-span-4">Type / ID</div>
-                        <div className="col-span-4 md:col-span-3">Date</div>
-                        <div className="col-span-3 md:col-span-3">Status</div>
-                        <div className="col-span-12 md:col-span-2 text-right md:text-right mt-2 md:mt-0">Amount</div>
+                {/* TRANSACTIONS LIST */}
+                <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                            <thead className="bg-slate-50/50 border-b border-slate-100 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                                <tr>
+                                    <th className="p-4 md:p-6">Type</th>
+                                    <th className="p-4 md:p-6">Description / Method</th>
+                                    <th className="p-4 md:p-6">Date</th>
+                                    <th className="p-4 md:p-6">Status</th>
+                                    <th className="p-4 md:p-6 text-right">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-50">
+                                {filteredTx.length > 0 ? (
+                                    filteredTx.map(tx => (
+                                        <tr key={tx.id} className="hover:bg-slate-50 transition group cursor-default">
+                                            <td className="p-4 md:p-6">
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white shadow-sm ${
+                                                        tx.type === 'DEPOSIT' ? 'bg-green-100 text-green-600' : 
+                                                        tx.type === 'WITHDRAW' ? 'bg-red-100 text-red-600' : 
+                                                        'bg-blue-100 text-blue-600'
+                                                    }`}>
+                                                        {tx.type === 'DEPOSIT' ? <ArrowDownLeft size={18} /> : 
+                                                         tx.type === 'WITHDRAW' ? <ArrowUpRight size={18} /> : 
+                                                         <ArrowRightLeft size={18} />}
+                                                    </div>
+                                                    <span className="font-bold text-slate-700 text-sm hidden md:inline-block">{tx.type}</span>
+                                                </div>
+                                            </td>
+                                            <td className="p-4 md:p-6">
+                                                <p className="font-bold text-slate-900 text-sm">{tx.method || 'General Transaction'}</p>
+                                                <p className="text-xs text-slate-400">ID: {tx.id.slice(0,8)}</p>
+                                            </td>
+                                            <td className="p-4 md:p-6">
+                                                <p className="text-sm font-medium text-slate-600">{formatDate(tx.createdAt)}</p>
+                                                <p className="text-xs text-slate-400">{new Date(tx.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</p>
+                                            </td>
+                                            <td className="p-4 md:p-6">
+                                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold uppercase ${
+                                                    tx.status === 'APPROVED' ? 'bg-green-50 text-green-700 border border-green-100' : 
+                                                    tx.status === 'PENDING' ? 'bg-amber-50 text-amber-700 border border-amber-100' : 
+                                                    'bg-red-50 text-red-700 border border-red-100'
+                                                }`}>
+                                                    {tx.status === 'APPROVED' && <CheckCircle size={12}/>}
+                                                    {tx.status === 'PENDING' && <AlertCircle size={12}/>}
+                                                    {tx.status}
+                                                </span>
+                                            </td>
+                                            <td className="p-4 md:p-6 text-right">
+                                                <p className={`font-bold text-sm md:text-base ${tx.type === 'DEPOSIT' ? 'text-green-600' : 'text-slate-900'}`}>
+                                                    {tx.type === 'DEPOSIT' ? '+' : '-'}{formatCurrency(tx.amount)}
+                                                </p>
+                                            </td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan="5" className="p-12 text-center">
+                                            <div className="flex flex-col items-center gap-2">
+                                                <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center text-slate-300">
+                                                    <Search size={24}/>
+                                                </div>
+                                                <p className="text-slate-500 font-bold">No transactions found</p>
+                                                <p className="text-xs text-slate-400">Try adjusting your filters</p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
                     </div>
-
-                    {/* TABLE BODY */}
-                    {isLoading ? (
-                        <div className="p-12 flex justify-center">
-                            <Loader2 className="animate-spin text-blue-600" size={32} />
-                        </div>
-                    ) : transactions.length === 0 ? (
-                        <div className="p-12 text-center text-slate-400">
-                            <RefreshCw className="mx-auto mb-2 opacity-50" size={32} />
-                            <p>No transactions found.</p>
-                        </div>
-                    ) : (
-                        <div className="divide-y divide-slate-100">
-                            {transactions.map((tx) => (
-                                <div key={tx.id} className="grid grid-cols-12 gap-4 p-4 hover:bg-slate-50 transition items-center">
-                                    
-                                    {/* TYPE */}
-                                    <div className="col-span-5 md:col-span-4 flex items-center gap-3">
-                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center 
-                                            ${tx.status === 'APPROVED' ? 'bg-green-100 text-green-600' : 
-                                              tx.status === 'PENDING' ? 'bg-yellow-100 text-yellow-600' : 'bg-red-100 text-red-600'}`}>
-                                            {tx.type === 'DEPOSIT' ? <ArrowRightLeft size={18} /> : <CreditCard size={18} />}
-                                        </div>
-                                        <div>
-                                            <p className="font-bold text-slate-900 text-sm">
-                                                {tx.type === 'DEPOSIT' ? 'Crypto Deposit' : 'Transfer'}
-                                            </p>
-                                            <p className="text-[10px] text-slate-400 font-mono">ID: #{tx.id}</p>
-                                        </div>
-                                    </div>
-
-                                    {/* DATE */}
-                                    <div className="col-span-4 md:col-span-3 text-sm text-slate-600">
-                                        {formatDate(tx.createdAt)}
-                                    </div>
-
-                                    {/* STATUS */}
-                                    <div className="col-span-3 md:col-span-3">
-                                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide
-                                            ${tx.status === 'APPROVED' ? 'bg-green-100 text-green-700' : 
-                                              tx.status === 'PENDING' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
-                                            {tx.status === 'APPROVED' ? <CheckCircle size={12} /> : 
-                                             tx.status === 'PENDING' ? <Clock size={12} /> : <XCircle size={12} />}
-                                            {tx.status}
-                                        </span>
-                                    </div>
-
-                                    {/* AMOUNT */}
-                                    <div className="col-span-12 md:col-span-2 text-right font-bold text-slate-900">
-                                        <span className={tx.type === 'DEPOSIT' ? 'text-green-600' : 'text-slate-900'}>
-                                            {tx.type === 'DEPOSIT' ? '+' : '-'}{formatCurrency(tx.amount)}
-                                        </span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
                 </div>
 
             </div>

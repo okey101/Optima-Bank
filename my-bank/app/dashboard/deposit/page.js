@@ -5,7 +5,7 @@ import {
   Home, ArrowRightLeft, CreditCard, Settings, LogOut, 
   Download, Send, Copy, CheckCircle2, RefreshCw, 
   ShieldCheck, AlertTriangle, Loader2, Wallet, Menu, X, Bell,
-  ChevronRight, Bitcoin
+  ChevronRight, Bitcoin, Globe, Landmark, TrendingUp, FileText, Gift, HelpCircle // <--- Added missing icons
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -13,7 +13,7 @@ import { useRouter } from 'next/navigation';
 
 // --- ASSET CONFIGURATION ---
 const ASSETS = [
-  { id: 'usdt', symbol: 'USDT', name: 'Tether', network: 'TRC20', color: 'bg-green-100 text-green-600', icon: '/file.svg' }, // Using file.svg as placeholder if specific icon missing
+  { id: 'usdt', symbol: 'USDT', name: 'Tether', network: 'TRC20', color: 'bg-green-100 text-green-600', icon: '/file.svg' },
   { id: 'btc', symbol: 'BTC', name: 'Bitcoin', network: 'Bitcoin', color: 'bg-orange-100 text-orange-600', icon: '/file.svg' },
   { id: 'eth', symbol: 'ETH', name: 'Ethereum', network: 'ERC20', color: 'bg-indigo-100 text-indigo-600', icon: '/file.svg' },
   { id: 'sol', symbol: 'SOL', name: 'Solana', network: 'Solana', color: 'bg-purple-100 text-purple-600', icon: '/file.svg' },
@@ -35,7 +35,6 @@ export default function DepositPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState(ASSETS[0]); // Default to USDT
   const [copied, setCopied] = useState(false);
-  const [depositAmount, setDepositAmount] = useState('');
 
   // --- FETCH USER DATA ---
   useEffect(() => {
@@ -82,17 +81,55 @@ export default function DepositPage() {
              <div className="relative w-full h-32"><Image src="/logo.png" alt="Logo" fill className="object-contain" priority /></div>
              <button onClick={() => setSidebarOpen(false)} className="lg:hidden absolute top-4 right-4 text-slate-400"><X size={24}/></button>
         </div>
+        
         <div className="p-6 border-b border-slate-100 shrink-0">
             <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold text-lg">{user.firstName[0]}</div>
-                <div className="overflow-hidden"><p className="text-sm font-bold text-slate-900 truncate">{user.firstName} {user.lastName}</p><p className="text-xs text-slate-400 truncate">{user.email}</p></div>
+                <div className="overflow-hidden">
+                    <p className="text-sm font-bold text-slate-900 truncate">{user.firstName} {user.lastName}</p>
+                    <p className="text-xs text-slate-400 truncate">{user.email}</p>
+                </div>
             </div>
         </div>
-        <nav className="flex-1 overflow-y-auto p-4 space-y-6">
-            <div><p className="px-4 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Main Menu</p><div className="space-y-1"><SidebarLink href="/dashboard" icon={Home} label="Dashboard" /><SidebarLink href="/dashboard/transactions" icon={ArrowRightLeft} label="Transactions" /><SidebarLink href="/dashboard/cards" icon={CreditCard} label="My Cards" /><SidebarLink href="/dashboard/transfer" icon={Send} label="Transfer Money" /><SidebarLink href="/dashboard/deposit" icon={Download} label="Deposit Funds" active={true} /></div></div>
-            <div><p className="px-4 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">System</p><div className="space-y-1"><SidebarLink href="/dashboard/kyc" icon={ShieldCheck} label="Verification Center" /><SidebarLink href="/dashboard/settings" icon={Settings} label="Settings" /></div></div>
+
+        <nav className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
+            <div>
+                <p className="px-4 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Main Menu</p>
+                <div className="space-y-1">
+                    <SidebarLink href="/dashboard" icon={Home} label="Dashboard" />
+                    <SidebarLink href="/dashboard/transactions" icon={ArrowRightLeft} label="Transactions" />
+                    <SidebarLink href="/dashboard/cards" icon={CreditCard} label="My Cards" />
+                    <SidebarLink href="/dashboard/transfer" icon={Send} label="Transfer Money" />
+                    {/* ACTIVE LINK */}
+                    <SidebarLink href="/dashboard/deposit" icon={Download} label="Deposit Funds" active={true} />
+                </div>
+            </div>
+            <div>
+                <p className="px-4 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Services</p>
+                <div className="space-y-1">
+                    <SidebarLink href="/dashboard/transfer" icon={Globe} label="International Wire" />
+                    <SidebarLink href="/dashboard/loans" icon={Landmark} label="Loan Services" />
+                    <SidebarLink href="/dashboard/invest" icon={TrendingUp} label="Investments" />
+                    <SidebarLink href="/dashboard/tax" icon={FileText} label="IRS Tax Refund" />
+                    {/* ✅ REPLACED BILL PAYMENTS WITH GRANTS */}
+                    <SidebarLink href="/dashboard/grants" icon={Gift} label="Grants & Aid" />
+                </div>
+            </div>
+            <div>
+                <p className="px-4 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">System</p>
+                <div className="space-y-1">
+                    <SidebarLink href="/dashboard/kyc" icon={ShieldCheck} label="Verification Center" />
+                    <SidebarLink href="/dashboard/settings" icon={Settings} label="Settings" />
+                    <SidebarLink href="/dashboard/support" icon={HelpCircle} label="Help & Support" />
+                </div>
+            </div>
         </nav>
-        <div className="p-4 border-t border-slate-100 shrink-0"><button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 rounded-xl font-medium transition"><LogOut size={18} /> <span className="text-sm">Log Out</span></button></div>
+
+        <div className="p-4 border-t border-slate-100 shrink-0">
+            <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 rounded-xl font-medium transition">
+                <LogOut size={18} /> <span className="text-sm">Log Out</span>
+            </button>
+        </div>
       </aside>
 
       {/* MAIN CONTENT */}
@@ -124,7 +161,6 @@ export default function DepositPage() {
                                     className={`w-full flex items-center gap-4 p-4 rounded-2xl border-2 transition-all ${selectedAsset.id === asset.id ? 'border-blue-600 bg-blue-50' : 'border-slate-100 hover:border-slate-200 hover:bg-slate-50'}`}
                                 >
                                     <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${asset.color}`}>
-                                        {/* Fallback to text if icon fails, simplified for this snippet */}
                                         {asset.symbol[0]}
                                     </div>
                                     <div className="text-left flex-1">
@@ -159,7 +195,6 @@ export default function DepositPage() {
 
                         {/* DYNAMIC QR CODE */}
                         <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 inline-block mx-auto mb-8 shadow-sm">
-                            {/* Using a public API for QR generation based on address */}
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img 
                                 src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${getAddress(selectedAsset.id)}`} 
@@ -185,7 +220,7 @@ export default function DepositPage() {
                             </div>
                         </div>
 
-                        {/* MANUAL CONFIRMATION (Optional) */}
+                        {/* MANUAL CONFIRMATION */}
                         <div className="mt-10 pt-8 border-t border-slate-100">
                             <p className="text-xs text-slate-400 mb-4">Funds usually arrive within 3 network confirmations.</p>
                             <button onClick={() => window.location.reload()} className="text-blue-600 font-bold text-sm hover:underline flex items-center justify-center gap-2">

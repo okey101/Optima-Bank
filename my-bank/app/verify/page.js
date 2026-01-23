@@ -1,77 +1,116 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { ShieldCheck, ArrowRight, Loader2 } from 'lucide-react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { CheckCircle, XCircle, Loader2, ShieldCheck } from 'lucide-react';
+import Link from 'next/link';
 
-export default function VerifyPage() {
-  const router = useRouter();
+// --- INTERNAL COMPONENT (Contains the Logic) ---
+function VerifyContent() {
   const searchParams = useSearchParams();
-  const email = searchParams.get('email'); // We get email from the URL
+  const router = useRouter();
+  const [status, setStatus] = useState('VERIFYING'); // VERIFYING, SUCCESS, ERROR
+  const [message, setMessage] = useState('Verifying your credentials...');
 
-  const [code, setCode] = useState(['', '', '', '', '', '']);
-  const [isLoading, setIsLoading] = useState(false);
+  useEffect(() => {
+    const verifyUser = async () => {
+      // Get params from URL
+      const email = searchParams.get('email');
+      const code = searchParams.get('code');
 
-  // Auto-focus logic
-  const handleChange = (index, value) => {
-    if (value.length > 1) return;
-    const newCode = [...code];
-    newCode[index] = value;
-    setCode(newCode);
-    if (value && index < 5) {
-      document.getElementById(`code-${index + 1}`).focus();
-    }
-  };
+      if (!email || !code) {
+        setStatus('ERROR');
+        setMessage('Invalid verification link.');
+        return;
+      }
 
-  const handleVerify = async () => {
-    setIsLoading(true);
-    const fullCode = code.join('');
+      try {
+        // Call your verification API
+        const res = await fetch('/api/auth/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, code })
+        });
 
-    const res = await fetch('/api/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, code: fullCode })
-    });
-
-    if (res.ok) {
         const data = await res.json();
-        localStorage.setItem('user', JSON.stringify(data.user));
-        router.push('/dashboard');
-    } else {
-        alert("Invalid Code!");
-        setIsLoading(false);
-    }
-  };
+
+        if (res.ok) {
+          setStatus('SUCCESS');
+          setMessage('Account verified successfully!');
+          // Redirect to login after 2 seconds
+          setTimeout(() => router.push('/login'), 2000);
+        } else {
+          setStatus('ERROR');
+          setMessage(data.error || 'Verification failed.');
+        }
+      } catch (error) {
+        setStatus('ERROR');
+        setMessage('Connection error. Please try again.');
+      }
+    };
+
+    verifyUser();
+  }, [searchParams, router]);
 
   return (
-    <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6 text-center font-sans">
-        <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mb-6">
-            <ShieldCheck size={32} />
+    <div className="bg-white p-8 rounded-3xl shadow-xl border border-slate-100 max-w-md w-full text-center">
+      {status === 'VERIFYING' && (
+        <div className="flex flex-col items-center">
+          <Loader2 className="animate-spin text-blue-600 mb-4" size={48} />
+          <h2 className="text-xl font-bold text-slate-900">Verifying...</h2>
+          <p className="text-slate-500 mt-2">{message}</p>
         </div>
-        <h1 className="text-2xl font-bold text-slate-900 mb-2">Verify Your Email</h1>
-        <p className="text-slate-500 mb-8">We sent a code to <span className="font-bold text-slate-800">{email}</span></p>
+      )}
 
-        <div className="flex gap-2 mb-8 justify-center">
-            {code.map((digit, i) => (
-                <input
-                    key={i}
-                    id={`code-${i}`}
-                    type="text"
-                    maxLength="1"
-                    value={digit}
-                    onChange={(e) => handleChange(i, e.target.value)}
-                    className="w-12 h-14 border-2 border-slate-200 rounded-lg text-center text-2xl font-bold focus:border-blue-600 focus:ring-4 focus:ring-blue-50 outline-none transition"
-                />
-            ))}
+      {status === 'SUCCESS' && (
+        <div className="flex flex-col items-center animate-in zoom-in">
+          <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-4">
+            <CheckCircle size={32} />
+          </div>
+          <h2 className="text-xl font-bold text-slate-900">Verified!</h2>
+          <p className="text-slate-500 mt-2 mb-6">{message}</p>
+          <Link href="/login" className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-blue-700 transition w-full">
+            Go to Login
+          </Link>
         </div>
+      )}
 
-        <button 
-            onClick={handleVerify}
-            disabled={isLoading || code.includes('')}
-            className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold shadow-lg hover:bg-blue-700 transition flex items-center gap-2 disabled:opacity-50"
-        >
-            {isLoading ? <Loader2 className="animate-spin" /> : 'Verify Account'} <ArrowRight size={20} />
-        </button>
+      {status === 'ERROR' && (
+        <div className="flex flex-col items-center animate-in zoom-in">
+          <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-4">
+            <XCircle size={32} />
+          </div>
+          <h2 className="text-xl font-bold text-slate-900">Verification Failed</h2>
+          <p className="text-slate-500 mt-2 mb-6">{message}</p>
+          <Link href="/login" className="text-blue-600 font-bold hover:underline">
+            Back to Login
+          </Link>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- MAIN PAGE COMPONENT (Wraps logic in Suspense) ---
+export default function VerifyPage() {
+  return (
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
+      <div className="mb-8 text-center">
+        <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-blue-200 mx-auto mb-4">
+          L
+        </div>
+        <h1 className="text-2xl font-bold text-slate-900">Security Check</h1>
+      </div>
+      
+      {/* ✅ THIS SUSPENSE BOUNDARY FIXES THE BUILD ERROR */}
+      <Suspense fallback={
+        <div className="bg-white p-8 rounded-3xl shadow-xl border border-slate-100 max-w-md w-full text-center flex flex-col items-center">
+            <Loader2 className="animate-spin text-blue-600 mb-4" size={40} />
+            <p className="text-slate-500 font-bold">Loading security...</p>
+        </div>
+      }>
+        <VerifyContent />
+      </Suspense>
     </div>
   );
 }

@@ -4,8 +4,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { 
   Home, ArrowRightLeft, CreditCard, Settings, ShieldCheck, ShieldAlert, 
   CheckCircle2, ChevronRight, UploadCloud, Camera, FileText, User, Lock, 
-  Loader2, Menu, X, Globe, Zap, Download, Send, Landmark, Eye, EyeOff, 
-  RefreshCw, Image as ImageIcon, AlertTriangle
+  Loader2, Menu, X, Globe, Download, Send, Landmark, Eye, EyeOff, 
+  RefreshCw, Image as ImageIcon, AlertTriangle, Gift, HelpCircle, LogOut, TrendingUp // <--- Added Gift, HelpCircle, LogOut, TrendingUp
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -68,6 +68,7 @@ const FileUpload = ({ label, onFileSelect, uploadedFile }) => {
   );
 };
 
+// --- SHARED SIDEBAR COMPONENT ---
 const SidebarLink = ({ icon: Icon, label, href, active }) => (
   <Link href={href} className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all duration-200 ${active ? 'bg-blue-50 text-blue-600 font-bold' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
     <Icon size={18} />
@@ -182,6 +183,11 @@ export default function KYCPage() {
       setSelfiePreview(URL.createObjectURL(e.target.files[0]));
     }
   };
+  
+  const handleDocUpload = (file, side) => {
+    if (side === 'front') setIdFront(file);
+    if (side === 'back') setIdBack(file);
+  };
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
@@ -227,6 +233,8 @@ export default function KYCPage() {
         handleSubmit(); 
     }
   };
+  
+  const handleLogout = () => { localStorage.removeItem('user'); router.push('/login'); };
 
   // --- RENDER STATES ---
 
@@ -290,20 +298,60 @@ export default function KYCPage() {
       
       {/* SIDEBAR */}
       {sidebarOpen && <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm transition-opacity" onClick={() => setSidebarOpen(false)} />}
-      <aside className={`fixed inset-y-0 left-0 z-50 w-72 bg-white border-r border-slate-200 transform transition-transform duration-300 lg:static lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} flex flex-col`}>
+      <aside className={`fixed inset-y-0 left-0 z-50 w-72 bg-white border-r border-slate-200 transform transition-transform duration-300 lg:static lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} flex flex-col h-full shrink-0`}>
         <div className="h-40 flex items-center justify-center px-4 border-b border-slate-100 shrink-0 bg-slate-50/30">
              <div className="relative w-full h-32"><Image src="/logo.png" alt="Logo" fill className="object-contain" priority /></div>
              <button onClick={() => setSidebarOpen(false)} className="lg:hidden absolute top-4 right-4 text-slate-400"><X size={24}/></button>
         </div>
-        <nav className="flex-1 overflow-y-auto p-4 space-y-6">
-            <SidebarLink href="/dashboard" icon={Home} label="Dashboard" />
-            <SidebarLink href="/dashboard/transactions" icon={ArrowRightLeft} label="Transactions" />
-            <SidebarLink href="/dashboard/cards" icon={CreditCard} label="My Cards" />
-            <SidebarLink href="/dashboard/transfer" icon={Send} label="Transfer Money" />
-            <SidebarLink href="/dashboard/deposit" icon={Download} label="Deposit Funds" />
-            <SidebarLink href="/dashboard/kyc" icon={ShieldCheck} label="Verification Center" active={true} />
-            <SidebarLink href="/dashboard/settings" icon={Settings} label="Settings" />
+        
+        {/* User Info in Sidebar */}
+        <div className="p-6 border-b border-slate-100 shrink-0">
+            <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold text-lg">{user?.firstName?.[0]}</div>
+                <div className="overflow-hidden">
+                    <p className="text-sm font-bold text-slate-900 truncate">{user?.firstName} {user?.lastName}</p>
+                    <p className="text-xs text-slate-400 truncate">{user?.email}</p>
+                </div>
+            </div>
+        </div>
+
+        <nav className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
+            <div>
+                <p className="px-4 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Main Menu</p>
+                <div className="space-y-1">
+                    <SidebarLink href="/dashboard" icon={Home} label="Dashboard" />
+                    <SidebarLink href="/dashboard/transactions" icon={ArrowRightLeft} label="Transactions" />
+                    <SidebarLink href="/dashboard/cards" icon={CreditCard} label="My Cards" />
+                    <SidebarLink href="/dashboard/transfer" icon={Send} label="Transfer Money" />
+                    <SidebarLink href="/dashboard/deposit" icon={Download} label="Deposit Funds" />
+                </div>
+            </div>
+            <div>
+                <p className="px-4 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Services</p>
+                <div className="space-y-1">
+                    <SidebarLink href="/dashboard/transfer" icon={Globe} label="International Wire" />
+                    <SidebarLink href="/dashboard/loans" icon={Landmark} label="Loan Services" />
+                    <SidebarLink href="/dashboard/invest" icon={TrendingUp} label="Investments" />
+                    <SidebarLink href="/dashboard/tax" icon={FileText} label="IRS Tax Refund" />
+                    {/* ✅ REPLACED BILL PAYMENTS WITH GRANTS */}
+                    <SidebarLink href="/dashboard/grants" icon={Gift} label="Grants & Aid" />
+                </div>
+            </div>
+            <div>
+                <p className="px-4 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">System</p>
+                <div className="space-y-1">
+                    <SidebarLink href="/dashboard/kyc" icon={ShieldCheck} label="Verification Center" active={true} />
+                    <SidebarLink href="/dashboard/settings" icon={Settings} label="Settings" />
+                    <SidebarLink href="/dashboard/support" icon={HelpCircle} label="Help & Support" />
+                </div>
+            </div>
         </nav>
+
+        <div className="p-4 border-t border-slate-100 shrink-0">
+            <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 rounded-xl font-medium transition">
+                <LogOut size={18} /> <span className="text-sm">Log Out</span>
+            </button>
+        </div>
       </aside>
 
       {/* MAIN CONTENT */}

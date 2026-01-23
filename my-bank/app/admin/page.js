@@ -3,16 +3,15 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Users, ShieldCheck, DollarSign, Activity, 
-  Search, Bell, LogOut, Key
+  Search, Bell, LogOut, Key, Landmark, FileText 
 } from 'lucide-react';
 import Link from 'next/link';
 import AdminGuard from '../../components/AdminGuard'; // Import Guard
 
 export default function AdminDashboard() {
-  // We removed the local PIN logic because AdminGuard handles it now!
+  // Mock Stats (You can replace this with real API calls later)
   const [stats, setStats] = useState({ users: 0, pendingKyc: 0, deposits: 0 });
 
-  // Mock Fetch Stats (You can replace this with a real API later)
   useEffect(() => {
     // Simulate fetching stats
     setStats({ users: 12, pendingKyc: 3, deposits: 14500 });
@@ -28,11 +27,26 @@ export default function AdminDashboard() {
                     <h2 className="text-xl font-bold text-white tracking-wider">ADMIN<span className="text-blue-500">PANEL</span></h2>
                 </div>
                 <nav className="flex-1 p-4 space-y-2">
-                    <Link href="/admin" className="flex items-center gap-3 px-4 py-3 bg-blue-600 text-white rounded-xl font-bold"><Activity size={20}/> Dashboard</Link>
-                    <Link href="/admin/kyc" className="flex items-center gap-3 px-4 py-3 hover:bg-slate-800 rounded-xl transition"><ShieldCheck size={20}/> KYC Requests</Link>
-                    <Link href="/admin/keys" className="flex items-center gap-3 px-4 py-3 hover:bg-slate-800 rounded-xl transition"><Key size={20}/> Wallet Keys</Link>
+                    <Link href="/admin" className="flex items-center gap-3 px-4 py-3 bg-blue-600 text-white rounded-xl font-bold">
+                        <Activity size={20}/> Dashboard
+                    </Link>
+                    <Link href="/admin/kyc" className="flex items-center gap-3 px-4 py-3 hover:bg-slate-800 rounded-xl transition">
+                        <ShieldCheck size={20}/> KYC Requests
+                    </Link>
+                    <Link href="/admin/loans" className="flex items-center gap-3 px-4 py-3 hover:bg-slate-800 rounded-xl transition">
+                        <Landmark size={20}/> Loan Requests
+                    </Link>
+                    {/* ✅ NEW: Tax Requests Link */}
+                    <Link href="/admin/tax" className="flex items-center gap-3 px-4 py-3 hover:bg-slate-800 rounded-xl transition">
+                        <FileText size={20}/> Tax Requests
+                    </Link>
+                    <Link href="/admin/keys" className="flex items-center gap-3 px-4 py-3 hover:bg-slate-800 rounded-xl transition">
+                        <Key size={20}/> Wallet Keys
+                    </Link>
                     <div className="pt-8">
-                        <button onClick={() => window.location.reload()} className="flex items-center gap-3 px-4 py-3 text-red-400 hover:bg-slate-800 rounded-xl transition w-full"><LogOut size={20}/> Logout</button>
+                        <button onClick={() => window.location.reload()} className="flex items-center gap-3 px-4 py-3 text-red-400 hover:bg-slate-800 rounded-xl transition w-full">
+                            <LogOut size={20}/> Logout
+                        </button>
                     </div>
                 </nav>
             </aside>
@@ -82,8 +96,18 @@ export default function AdminDashboard() {
                         <ShieldCheck size={32} />
                         <span className="font-bold">Review KYC</span>
                     </Link>
+
+                    <Link href="/admin/loans" className="p-6 bg-emerald-600 text-white rounded-2xl hover:bg-emerald-700 transition shadow-lg shadow-emerald-200 flex flex-col items-center gap-2 text-center">
+                        <Landmark size={32} />
+                        <span className="font-bold">Loan Requests</span>
+                    </Link>
+
+                    {/* ✅ NEW: Tax Requests Action */}
+                    <Link href="/admin/tax" className="p-6 bg-purple-600 text-white rounded-2xl hover:bg-purple-700 transition shadow-lg shadow-purple-200 flex flex-col items-center gap-2 text-center">
+                        <FileText size={32} />
+                        <span className="font-bold">Tax Refunds</span>
+                    </Link>
                     
-                    {/* ✅ NEW BUTTON: Access Wallet Manager */}
                     <Link href="/admin/keys" className="p-6 bg-slate-900 text-white rounded-2xl hover:bg-slate-800 transition shadow-lg shadow-slate-200 flex flex-col items-center gap-2 text-center">
                         <Key size={32} />
                         <span className="font-bold">Wallet Keys</span>

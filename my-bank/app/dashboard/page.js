@@ -2,11 +2,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Home, ArrowRightLeft, Wallet, CreditCard, Settings, LogOut, Bell, 
+  Home, ArrowRightLeft, CreditCard, Settings, LogOut, Bell, 
   ArrowUpRight, ArrowDownLeft, Loader2, Menu, Eye, EyeOff, 
-  LayoutGrid, FileText, HelpCircle, Landmark, ShieldAlert, BarChart3,
-  Globe, Download, Send, Check, Copy, Repeat, X, ShieldCheck, UserCheck, 
-  Info, AlertTriangle, CheckCircle2, Zap, TrendingUp
+  FileText, HelpCircle, Landmark, ShieldAlert, 
+  Globe, Download, Send, Check, Copy, Repeat, X, ShieldCheck, 
+  Activity, TrendingUp, Gift, User, CheckCircle2, AlertTriangle
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -15,13 +15,6 @@ import { useRouter } from 'next/navigation';
 // --- UTILS ---
 const formatCurrency = (val) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val || 0);
 const formatDate = (d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-
-// --- MOCK NOTIFICATIONS ---
-const INITIAL_NOTIFICATIONS = [
-  { id: 1, type: 'transaction', title: 'Deposit Received', message: 'You have received $5,000.00 from Upwork Escrow Inc.', time: '2 mins ago', read: false },
-  { id: 2, type: 'system', title: 'Security Alert', message: 'New login detected from iPhone 14 Pro in Lagos, NG.', time: '1 hour ago', read: false },
-  { id: 3, type: 'transaction', title: 'Transfer Successful', message: 'Your transfer of $200.00 to Sarah James was successful.', time: '5 hours ago', read: true },
-];
 
 // --- COMPONENTS ---
 const MenuGridItem = ({ icon: Icon, label, color, onClick, badge }) => (
@@ -35,8 +28,8 @@ const MenuGridItem = ({ icon: Icon, label, color, onClick, badge }) => (
 );
 
 const BigActionButton = ({ icon: Icon, label, color, onClick }) => (
-  <button onClick={onClick} className="flex flex-col items-start justify-between p-4 h-28 md:h-32 bg-white border border-slate-100 rounded-2xl shadow-sm active:scale-95 transition-all duration-200 w-full">
-    <div className={`p-2.5 md:p-3 rounded-full ${color} text-white shadow-sm`}>
+  <button onClick={onClick} className="flex flex-col items-start justify-between p-4 h-28 md:h-32 bg-white border border-slate-100 rounded-2xl shadow-sm active:scale-95 transition-all duration-200 w-full group">
+    <div className={`p-2.5 md:p-3 rounded-full ${color} text-white shadow-sm group-hover:scale-110 transition-transform`}>
       <Icon size={18} className="md:w-5 md:h-5" />
     </div>
     <p className="text-sm font-bold text-slate-800 mt-2">{label}</p>
@@ -78,27 +71,28 @@ export default function DashboardPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [hideBalance, setHideBalance] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [copiedId, setCopiedId] = useState(false);
-
+  
   // Financial Data
   const [portfolioValue, setPortfolioValue] = useState(0);
   const [transactions, setTransactions] = useState([]);
   const [assets, setAssets] = useState([]);
-  const [kycStatus, setKycStatus] = useState('PENDING'); // Default to pending to be safe
+  const [kycStatus, setKycStatus] = useState('PENDING'); 
   
-  // Notification State
+  // Notifications
   const [showNotifications, setShowNotifications] = useState(false);
-  const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
-  const [activeNotifTab, setActiveNotifTab] = useState('all');
   const notifRef = useRef(null);
+  const [notifications, setNotifications] = useState([
+    { id: 1, title: 'Welcome to Finora', msg: 'Your account has been successfully created.', type: 'info', time: 'Just now' },
+    { id: 2, title: 'KYC Required', msg: 'Please verify your identity to unlock all features.', type: 'alert', time: '1 hour ago' },
+    { id: 3, title: 'Login Alert', msg: 'New login detected from Chrome on Windows.', type: 'security', time: '2 hours ago' },
+  ]);
 
-  // Quick Exchange State
+  // Quick Exchange
   const [convertFrom, setConvertFrom] = useState('USDT');
   const [convertTo, setConvertTo] = useState('BTC');
   const [convertAmount, setConvertAmount] = useState('');
   const [isConverting, setIsConverting] = useState(false);
   const [convertSuccess, setConvertSuccess] = useState(false);
-  const [convertMsg, setConvertMsg] = useState('');
 
   // CLOCK
   useEffect(() => {
@@ -121,12 +115,9 @@ export default function DashboardPage() {
       if (!stored) { router.push('/login'); return; }
       const currentUser = JSON.parse(stored);
       setUser(currentUser);
-      
-      // Init status from local storage, but fetch fresh immediately
       setKycStatus(currentUser.kycStatus || 'UNVERIFIED'); 
 
       try {
-        // 1. Fetch Transactions
         const resTx = await fetch('/api/transactions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -144,7 +135,6 @@ export default function DashboardPage() {
             setAssets([{symbol:'USDT', usdVal: total}, {symbol:'BTC', usdVal: 0}]); 
         }
 
-        // 2. Fetch Fresh User Status (Fix for Stale KYC)
         const resStatus = await fetch('/api/user/refresh', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -153,11 +143,7 @@ export default function DashboardPage() {
         
         if (resStatus.ok) {
             const data = await resStatus.json();
-            const freshUser = data.user;
-            // Update State
-            setKycStatus(freshUser.kycStatus || 'UNVERIFIED');
-            // Update Local Storage
-            const mergedUser = { ...currentUser, ...freshUser };
+            const mergedUser = { ...currentUser, ...data.user };
             localStorage.setItem('user', JSON.stringify(mergedUser));
         }
 
@@ -167,30 +153,22 @@ export default function DashboardPage() {
 
   useEffect(() => { refreshData(); }, [router]);
 
-  // UTILS
-  const unreadCount = notifications.filter(n => !n.read).length;
-  const filteredNotifications = notifications.filter(n => {
-      if (activeNotifTab === 'all') return true;
-      return n.type === activeNotifTab;
-  });
-  const markAllRead = () => setNotifications(prev => prev.map(n => ({...n, read: true})));
-
   const handleConvert = async () => {
     setIsConverting(true);
     setTimeout(() => {
         setIsConverting(false);
         setConvertSuccess(true);
-        setConvertMsg('Success');
         setTimeout(() => setConvertSuccess(false), 2000);
     }, 1500);
   };
 
   const copyAccountId = () => {
-    if (user?.accountNumber) {
-        navigator.clipboard.writeText(user.accountNumber);
-        setCopiedId(true);
-        setTimeout(() => setCopiedId(false), 2000);
-    }
+    if (user?.accountNumber) navigator.clipboard.writeText(user.accountNumber);
+  };
+
+  const clearNotifications = () => {
+      setNotifications([]);
+      setShowNotifications(false);
   };
 
   const handleLogout = () => { localStorage.removeItem('user'); router.push('/login'); };
@@ -200,47 +178,32 @@ export default function DashboardPage() {
   return (
     <div className="h-screen w-full bg-slate-50 font-sans flex text-slate-900 overflow-hidden">
       
-      {/* CUSTOM SCROLLBAR STYLES */}
-      <style jsx global>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-      `}</style>
-
-      {/* MOBILE SIDEBAR OVERLAY */}
+      {/* MOBILE OVERLAY */}
       {sidebarOpen && <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm transition-opacity" onClick={() => setSidebarOpen(false)} />}
       
       {/* SIDEBAR */}
       <aside className={`fixed inset-y-0 left-0 z-50 w-72 bg-white border-r border-slate-200 transform transition-transform duration-300 lg:static lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} flex flex-col h-full shrink-0`}>
         
-        {/* ✅ ENLARGED LOGO HEADER */}
         <div className="h-40 flex items-center justify-center px-4 border-b border-slate-100 shrink-0 bg-slate-50/30">
              <div className="relative w-full h-32"><Image src="/logo.png" alt="Logo" fill className="object-contain" priority /></div>
              <button onClick={() => setSidebarOpen(false)} className="lg:hidden absolute top-4 right-4 text-slate-400"><X size={24}/></button>
         </div>
         
-        {/* USER PROFILE */}
         <div className="p-6 border-b border-slate-100 shrink-0">
             <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold text-lg">
-                    {user.firstName[0]}
-                </div>
+                <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold text-lg">{user.firstName[0]}</div>
                 <div className="overflow-hidden">
                     <p className="text-sm font-bold text-slate-900 truncate">{user.firstName} {user.lastName}</p>
                     <p className="text-xs text-slate-400 truncate">{user.email}</p>
                 </div>
             </div>
-            {/* ✅ FIXED: Uppercase 'VERIFIED' check */}
             {kycStatus !== 'VERIFIED' && (
                 <Link href="/dashboard/kyc" className="mt-4 flex items-center justify-center gap-2 w-full bg-red-50 text-red-600 border border-red-100 py-2.5 rounded-xl text-xs font-bold hover:bg-red-100 transition">
-                    <ShieldAlert size={14} /> 
-                    {kycStatus === 'PENDING' ? 'Verification Pending' : 'Verify Identity'}
+                    <ShieldAlert size={14} /> {kycStatus === 'PENDING' ? 'Verification Pending' : 'Verify Identity'}
                 </Link>
             )}
         </div>
 
-        {/* NAV LINKS */}
         <nav className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
             <div>
                 <p className="px-4 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Main Menu</p>
@@ -255,11 +218,11 @@ export default function DashboardPage() {
             <div>
                 <p className="px-4 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Services</p>
                 <div className="space-y-1">
-                    <SidebarLink href="/dashboard/international" icon={Globe} label="International Wire" />
+                    <SidebarLink href="/dashboard/transfer" icon={Globe} label="International Wire" />
                     <SidebarLink href="/dashboard/loans" icon={Landmark} label="Loan Services" />
-                    <SidebarLink href="/dashboard/bills" icon={Zap} label="Bill Payments" />
                     <SidebarLink href="/dashboard/invest" icon={TrendingUp} label="Investments" />
                     <SidebarLink href="/dashboard/tax" icon={FileText} label="IRS Tax Refund" />
+                    <SidebarLink href="/dashboard/grants" icon={Gift} label="Grants & Aid" />
                 </div>
             </div>
             <div>
@@ -272,7 +235,6 @@ export default function DashboardPage() {
             </div>
         </nav>
 
-        {/* FOOTER */}
         <div className="p-4 border-t border-slate-100 shrink-0">
             <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 rounded-xl font-medium transition">
                 <LogOut size={18} /> <span className="text-sm">Log Out</span>
@@ -302,53 +264,50 @@ export default function DashboardPage() {
                     <p className="text-xs text-slate-400 font-bold">{currentTime.toLocaleDateString([], {weekday: 'long', month: 'long', day:'numeric'})}</p>
                 </div>
                 
-                {/* NOTIFICATION */}
+                {/* --- NOTIFICATION CENTER --- */}
                 <div className="relative" ref={notifRef}>
                     <button onClick={() => setShowNotifications(!showNotifications)} className={`relative p-2 rounded-full transition ${showNotifications ? 'bg-blue-100 text-blue-600' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'}`}>
                         <Bell size={20} />
-                        {unreadCount > 0 && <span className="absolute top-1.5 right-2 w-2 h-2 bg-red-500 rounded-full border border-white animate-pulse"></span>}
+                        {notifications.length > 0 && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white"></span>}
                     </button>
+
                     {showNotifications && (
-                        <div className="absolute top-12 right-0 w-80 md:w-96 bg-white border border-slate-100 shadow-2xl rounded-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
-                            <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                                <h3 className="font-bold text-slate-800">Notifications</h3>
-                                <button onClick={markAllRead} className="text-[10px] font-bold text-blue-600 hover:underline">Mark all as read</button>
+                        <div className="absolute top-12 right-0 w-80 md:w-96 bg-white rounded-2xl shadow-xl border border-slate-100 p-4 z-50 animate-in fade-in slide-in-from-top-2 origin-top-right">
+                            <div className="flex justify-between items-center mb-4 pb-2 border-b border-slate-50">
+                                <h3 className="font-bold text-slate-900">Notifications</h3>
+                                <button onClick={clearNotifications} className="text-xs text-blue-600 font-bold hover:underline">Mark all read</button>
                             </div>
-                            <div className="flex p-2 gap-1 border-b border-slate-100 bg-white sticky top-0 z-10">
-                                {['all', 'transaction', 'system'].map(tab => (
-                                    <button key={tab} onClick={() => setActiveNotifTab(tab)} className={`flex-1 py-1.5 text-xs font-bold rounded-lg capitalize transition ${activeNotifTab === tab ? 'bg-slate-100 text-slate-900' : 'text-slate-400 hover:bg-slate-50'}`}>
-                                        {tab === 'all' ? 'All' : (tab === 'transaction' ? 'Transactions' : 'System')}
-                                    </button>
-                                ))}
-                            </div>
-                            <div className="max-h-80 overflow-y-auto p-2 space-y-1 custom-scrollbar">
-                                {filteredNotifications.length > 0 ? (
-                                    filteredNotifications.map(notif => (
-                                        <div key={notif.id} className={`flex gap-3 p-3 rounded-xl hover:bg-slate-50 transition cursor-pointer group ${!notif.read ? 'bg-blue-50/50' : ''}`}>
-                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${notif.type === 'transaction' ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'}`}>
-                                                {notif.type === 'transaction' ? <ArrowDownLeft size={16}/> : <ShieldAlert size={16}/>}
-                                            </div>
-                                            <div className="flex-1">
-                                                <div className="flex justify-between items-start">
-                                                    <p className={`text-xs font-bold ${!notif.read ? 'text-slate-900' : 'text-slate-600'}`}>{notif.title}</p>
-                                                    <span className="text-[10px] text-slate-400 whitespace-nowrap ml-2">{notif.time}</span>
-                                                </div>
-                                                <p className="text-[11px] text-slate-500 leading-tight mt-0.5 line-clamp-2">{notif.message}</p>
-                                            </div>
-                                            {!notif.read && <div className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shrink-0"></div>}
+                            <div className="space-y-3 max-h-72 overflow-y-auto custom-scrollbar">
+                                {notifications.length > 0 ? notifications.map(notif => (
+                                    <div key={notif.id} className="flex gap-3 p-3 rounded-xl hover:bg-slate-50 transition items-start">
+                                        <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+                                            notif.type === 'alert' ? 'bg-red-100 text-red-600' : 
+                                            notif.type === 'security' ? 'bg-orange-100 text-orange-600' : 
+                                            'bg-blue-100 text-blue-600'
+                                        }`}>
+                                            {notif.type === 'alert' ? <AlertTriangle size={14}/> : notif.type === 'security' ? <ShieldCheck size={14}/> : <Bell size={14}/>}
                                         </div>
-                                    ))
-                                ) : (
-                                    <div className="py-8 text-center"><Bell size={24} className="text-slate-200 mx-auto mb-2"/><p className="text-xs text-slate-400">No notifications found.</p></div>
+                                        <div>
+                                            <h4 className="text-sm font-bold text-slate-900">{notif.title}</h4>
+                                            <p className="text-xs text-slate-500 mt-0.5 leading-snug">{notif.msg}</p>
+                                            <span className="text-[10px] text-slate-400 mt-1 block">{notif.time}</span>
+                                        </div>
+                                    </div>
+                                )) : (
+                                    <div className="text-center py-8 text-slate-400">
+                                        <Bell size={32} className="mx-auto mb-2 opacity-50"/>
+                                        <p className="text-xs">No new notifications</p>
+                                    </div>
                                 )}
                             </div>
-                            <div className="p-2 border-t border-slate-100 bg-slate-50/50 text-center"><Link href="/dashboard/settings" className="text-[10px] font-bold text-slate-500 hover:text-slate-800">Notification Settings</Link></div>
                         </div>
                     )}
                 </div>
-                <div className="w-9 h-9 bg-slate-900 text-white rounded-full flex items-center justify-center font-bold text-sm shadow-lg ring-2 ring-white">
+
+                {/* --- PROFILE LINK AVATAR --- */}
+                <Link href="/dashboard/profile" className="w-9 h-9 bg-slate-900 text-white rounded-full flex items-center justify-center font-bold text-sm shadow-lg ring-2 ring-white hover:ring-2 hover:ring-blue-200 transition active:scale-95">
                     {user.firstName[0]}
-                </div>
+                </Link>
             </div>
         </header>
 
@@ -383,7 +342,7 @@ export default function DashboardPage() {
                             <h3 className="text-lg md:text-xl font-bold text-slate-800 mb-1">What would you like to do?</h3>
                             <p className="text-xs md:text-sm text-slate-500 mb-4">Choose from our popular actions below</p>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-                                <BigActionButton icon={FileText} label="Account Info" color="bg-slate-500" onClick={() => {}} />
+                                <BigActionButton icon={FileText} label="Account Info" color="bg-slate-500" onClick={() => router.push('/dashboard/settings')} />
                                 <BigActionButton icon={Send} label="Send Money" color="bg-blue-500" onClick={() => router.push('/dashboard/transfer')} />
                                 <BigActionButton icon={Download} label="Deposit" color="bg-green-500" onClick={() => router.push('/dashboard/deposit')} />
                                 <BigActionButton icon={ArrowRightLeft} label="History" color="bg-purple-500" onClick={() => router.push('/dashboard/transactions')} />
@@ -407,7 +366,6 @@ export default function DashboardPage() {
                                         {isConverting ? <Loader2 className="animate-spin" size={14}/> : (convertSuccess ? <Check size={16}/> : 'Convert')}
                                     </button>
                                 </div>
-                                {convertMsg && <p className="text-[10px] text-center text-slate-500">{convertMsg}</p>}
                             </div>
                         </div>
                     </div>
@@ -420,7 +378,6 @@ export default function DashboardPage() {
                         <span className="text-xs text-slate-400 font-medium italic">Select an option to continue</span>
                     </div>
                     <div className="grid grid-cols-3 md:grid-cols-6 gap-3 md:gap-4">
-                        {/* ✅ FIXED: Uppercase 'VERIFIED' check */}
                         {kycStatus !== 'VERIFIED' ? (
                             <MenuGridItem icon={ShieldAlert} label="Verify Account" color="bg-red-500" badge={true} onClick={() => router.push('/dashboard/kyc')} />
                         ) : (
@@ -429,12 +386,13 @@ export default function DashboardPage() {
                         <MenuGridItem icon={ArrowRightLeft} label="Activity" color="bg-green-500" onClick={() => router.push('/dashboard/transactions')} />
                         <MenuGridItem icon={CreditCard} label="Cards" color="bg-purple-500" onClick={() => router.push('/dashboard/cards')} />
                         <MenuGridItem icon={Send} label="Transfer" color="bg-indigo-500" onClick={() => router.push('/dashboard/transfer')} />
-                        <MenuGridItem icon={Globe} label="Int'l Wire" color="bg-cyan-500" onClick={() => {}} />
+                        <MenuGridItem icon={Globe} label="Int'l Wire" color="bg-cyan-500" onClick={() => router.push('/dashboard/transfer')} />
                         <MenuGridItem icon={Download} label="Deposit" color="bg-teal-500" onClick={() => router.push('/dashboard/deposit')} />
-                        <MenuGridItem icon={Landmark} label="Loan" color="bg-emerald-500" onClick={() => {}} />
-                        <MenuGridItem icon={FileText} label="IRS Refund" color="bg-orange-500" onClick={() => {}} />
+                        <MenuGridItem icon={Landmark} label="Loan" color="bg-emerald-500" onClick={() => router.push('/dashboard/loans')} />
+                        <MenuGridItem icon={FileText} label="IRS Refund" color="bg-orange-500" onClick={() => router.push('/dashboard/tax')} />
+                        <MenuGridItem icon={Gift} label="Grants" color="bg-pink-500" onClick={() => router.push('/dashboard/grants')} />
                         <MenuGridItem icon={Settings} label="Settings" color="bg-slate-600" onClick={() => router.push('/dashboard/settings')} />
-                        <MenuGridItem icon={HelpCircle} label="Support" color="bg-pink-500" onClick={() => {}} />
+                        <MenuGridItem icon={HelpCircle} label="Support" color="bg-slate-400" onClick={() => {}} />
                         <MenuGridItem icon={LogOut} label="Logout" color="bg-red-500" onClick={handleLogout} />
                     </div>
                 </div>
@@ -474,7 +432,7 @@ export default function DashboardPage() {
             </div>
             
             {/* FOOTER */}
-            <div className="max-w-6xl mx-auto mt-12 mb-4 text-center"><p className="text-[10px] text-slate-400">© 2026 longinova Bank. Secured by SSL.</p></div>
+            <div className="max-w-6xl mx-auto mt-12 mb-4 text-center"><p className="text-[10px] text-slate-400">© 2026 Finora Bank. Secured by SSL.</p></div>
         </div>
       </main>
     </div>
