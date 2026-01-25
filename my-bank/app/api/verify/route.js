@@ -11,6 +11,12 @@ export async function POST(req) {
         return NextResponse.json({ message: 'User not found' }, { status: 404 });
     }
 
+    // ✅ FIX: Allow login if ALREADY verified
+    if (user.isEmailVerified) {
+         const { password: _, ...userWithoutPassword } = user;
+         return NextResponse.json({ message: 'Already Verified', user: userWithoutPassword }, { status: 200 });
+    }
+
     if (user.verificationCode !== code) {
         return NextResponse.json({ message: 'Invalid code' }, { status: 400 });
     }
@@ -20,7 +26,7 @@ export async function POST(req) {
         where: { email },
         data: { 
             verificationCode: null,
-            isEmailVerified: true // ✅ FIX: This allows the user to log in
+            isEmailVerified: true 
         } 
     });
 
@@ -29,6 +35,7 @@ export async function POST(req) {
     return NextResponse.json({ message: 'Verified', user: userWithoutPassword }, { status: 200 });
 
   } catch (error) {
+    console.error(error);
     return NextResponse.json({ message: 'Error verifying' }, { status: 500 });
   }
 }
