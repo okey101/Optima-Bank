@@ -3,17 +3,16 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Users, ShieldCheck, DollarSign, Activity, 
-  Search, Bell, LogOut, Key, Landmark, FileText 
+  Bell, LogOut, Key, Landmark, FileText 
 } from 'lucide-react';
 import Link from 'next/link';
-import AdminGuard from '../../components/AdminGuard'; // Import Guard
+import AdminGuard from '../../components/AdminGuard'; 
 
 export default function AdminDashboard() {
-  // Mock Stats (You can replace this with real API calls later)
   const [stats, setStats] = useState({ users: 0, pendingKyc: 0, deposits: 0 });
 
   useEffect(() => {
-    // Simulate fetching stats
+    // You can fetch real stats here if you want
     setStats({ users: 12, pendingKyc: 3, deposits: 14500 });
   }, []);
 
@@ -22,7 +21,7 @@ export default function AdminDashboard() {
         <div className="min-h-screen bg-slate-50 font-sans text-slate-900 flex">
             
             {/* SIDEBAR */}
-            <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col fixed h-full">
+            <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col fixed h-full overflow-y-auto">
                 <div className="h-24 flex items-center justify-center border-b border-slate-800">
                     <h2 className="text-xl font-bold text-white tracking-wider">ADMIN<span className="text-blue-500">PANEL</span></h2>
                 </div>
@@ -30,20 +29,25 @@ export default function AdminDashboard() {
                     <Link href="/admin" className="flex items-center gap-3 px-4 py-3 bg-blue-600 text-white rounded-xl font-bold">
                         <Activity size={20}/> Dashboard
                     </Link>
+                    
+                    {/* ✅ NEW: Deposits Link */}
+                    <Link href="/admin/deposits" className="flex items-center gap-3 px-4 py-3 hover:bg-slate-800 rounded-xl transition">
+                        <DollarSign size={20}/> Deposits
+                    </Link>
+
                     <Link href="/admin/kyc" className="flex items-center gap-3 px-4 py-3 hover:bg-slate-800 rounded-xl transition">
                         <ShieldCheck size={20}/> KYC Requests
                     </Link>
                     <Link href="/admin/loans" className="flex items-center gap-3 px-4 py-3 hover:bg-slate-800 rounded-xl transition">
                         <Landmark size={20}/> Loan Requests
                     </Link>
-                    {/* ✅ NEW: Tax Requests Link */}
                     <Link href="/admin/tax" className="flex items-center gap-3 px-4 py-3 hover:bg-slate-800 rounded-xl transition">
                         <FileText size={20}/> Tax Requests
                     </Link>
                     <Link href="/admin/keys" className="flex items-center gap-3 px-4 py-3 hover:bg-slate-800 rounded-xl transition">
                         <Key size={20}/> Wallet Keys
                     </Link>
-                    <div className="pt-8">
+                    <div className="pt-8 pb-8">
                         <button onClick={() => window.location.reload()} className="flex items-center gap-3 px-4 py-3 text-red-400 hover:bg-slate-800 rounded-xl transition w-full">
                             <LogOut size={20}/> Logout
                         </button>
@@ -92,6 +96,13 @@ export default function AdminDashboard() {
                 {/* QUICK ACTIONS */}
                 <h3 className="font-bold text-slate-800 mb-4">Quick Actions</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    
+                    {/* ✅ NEW: Deposit Action */}
+                    <Link href="/admin/deposits" className="p-6 bg-green-600 text-white rounded-2xl hover:bg-green-700 transition shadow-lg shadow-green-200 flex flex-col items-center gap-2 text-center">
+                        <DollarSign size={32} />
+                        <span className="font-bold">Approve Deposits</span>
+                    </Link>
+
                     <Link href="/admin/kyc" className="p-6 bg-blue-600 text-white rounded-2xl hover:bg-blue-700 transition shadow-lg shadow-blue-200 flex flex-col items-center gap-2 text-center">
                         <ShieldCheck size={32} />
                         <span className="font-bold">Review KYC</span>
@@ -102,15 +113,9 @@ export default function AdminDashboard() {
                         <span className="font-bold">Loan Requests</span>
                     </Link>
 
-                    {/* ✅ NEW: Tax Requests Action */}
                     <Link href="/admin/tax" className="p-6 bg-purple-600 text-white rounded-2xl hover:bg-purple-700 transition shadow-lg shadow-purple-200 flex flex-col items-center gap-2 text-center">
                         <FileText size={32} />
                         <span className="font-bold">Tax Refunds</span>
-                    </Link>
-                    
-                    <Link href="/admin/keys" className="p-6 bg-slate-900 text-white rounded-2xl hover:bg-slate-800 transition shadow-lg shadow-slate-200 flex flex-col items-center gap-2 text-center">
-                        <Key size={32} />
-                        <span className="font-bold">Wallet Keys</span>
                     </Link>
                 </div>
             </main>
